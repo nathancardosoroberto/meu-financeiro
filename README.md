@@ -9,7 +9,10 @@ Dashboard que lê a planilha `planilha.xlsx` e mostra quanto ainda dá para gast
 4. **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` / `(root)` → Save**.
 5. Em 1–2 minutos o site fica em `https://SEU-USUARIO.github.io/meu-financeiro/`.
 
-## Atualizar
+## Atualizar o dashboard (arquivos novos)
+Suba só `index.html`, `app.js` e `style.css`. **Não substitua o seu `config.js`** (ele guarda o link do Google). Para o botão *Abrir planilha* aparecer, edite o `config.js` e adicione a linha `EDIT_URL: "link-normal-da-planilha",`.
+
+## Atualizar os dados
 Salve a planilha no Excel, e no GitHub faça **Add file → Upload files** com o arquivo `planilha.xlsx` (mesmo nome, ele substitui o antigo) → **Commit**. O dashboard lê a versão nova sozinho em ~1 minuto (clique em **Recarregar** se a página já estiver aberta).
 
 ## Alternativa: Google Sheets (atualiza sem subir arquivo)

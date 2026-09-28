@@ -5,91 +5,148 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
+<script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
   <div class="brand">
     <h1>Meu Financeiro</h1>
-    <p id="status" class="muted">Carregando planilha…</p>
+    <p id="status" class="muted small">Carregando planilha…</p>
   </div>
-  <div class="source">
-    <label class="btn">Carregar planilha (.xlsx)<input type="file" id="file" accept=".xlsx,.xls" hidden></label>
-    <button class="btn ghost" id="reload">Recarregar</button>
+  <div class="actions">
+    <select id="tema" aria-label="Tema">
+      <option value="auto">Tema: automático</option>
+      <option value="light">Tema: claro</option>
+      <option value="dark">Tema: escuro</option>
+    </select>
+    <a class="btn ghost" id="abrir" target="_blank" rel="noopener" hidden>Abrir planilha</a>
+    <button class="btn" id="reload">Atualizar do Google</button>
   </div>
 </header>
 
-<section class="filters" aria-label="Filtros">
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="geral" class="on">Visão geral</button>
+  <button role="tab" data-tab="dividas">Dívidas e contas</button>
+  <button role="tab" data-tab="sim">Simulação</button>
+</nav>
+
+<section class="filters" id="filtros" aria-label="Filtros">
   <div class="f"><label for="fMes">Mês</label><select id="fMes"></select></div>
   <div class="f"><label for="fDe">Gráficos de</label><select id="fDe"></select></div>
   <div class="f"><label for="fAte">até</label><select id="fAte"></select></div>
-  <div class="f"><label for="fCartao">Cartão</label><select id="fCartao"><option value="">Todos</option></select></div>
+  <div class="f"><label for="fCartao">Cartão / forma</label><select id="fCartao"></select></div>
   <div class="f"><label for="fDivida">Dívidas</label>
-    <select id="fDivida">
-      <option value="ativas">Ativas no mês</option>
-      <option value="3m">Terminam em até 3 meses</option>
-      <option value="todas">Todas</option>
-    </select></div>
+    <select id="fDivida"><option value="ativas">Ativas no mês</option><option value="3m">Terminam em até 3 meses</option><option value="todas">Todas</option></select></div>
   <div class="f"><label for="fReemb">Reembolso</label>
     <select id="fReemb"><option value="">Todos</option><option value="com">Com reembolso</option><option value="sem">Sem reembolso</option></select></div>
+  <div class="f wide"><label for="fItem">Item (conta ou dívida)</label><select id="fItem"></select></div>
   <div class="f"><label for="fUnid">Valores</label>
-    <select id="fUnid"><option value="rs">R$</option><option value="pct">% da renda do mês</option></select></div>
+    <select id="fUnid"><option value="rs">R$</option><option value="pct">% das entradas do mês</option></select></div>
 </section>
 
 <main>
-  <section class="hero card">
-    <div class="hero-main">
-      <p class="eyebrow">Ainda posso gastar no <span class="cardname">Inter</span> em <span id="hMes"></span></p>
-      <p class="big" id="hRestante">—</p>
-      <div class="bar" role="progressbar" aria-label="Uso do teto"><span id="hBar"></span></div>
-      <p class="muted" id="hResumo"></p>
-    </div>
-    <div class="hero-side">
-      <label for="gastoManual" class="muted">Já gastei no Inter este mês (valor do app)</label>
-      <input id="gastoManual" type="number" step="0.01" min="0" placeholder="usar lançamentos da aba Gastos">
-      <p class="muted small">Fica salvo só neste navegador. Vazio = soma da aba Gastos.</p>
-    </div>
-  </section>
+  <!-- ============ VISÃO GERAL ============ -->
+  <div class="tab" id="tab-geral">
+    <section class="card hoje" id="hoje"></section>
 
-  <section class="kpis" id="kpis"></section>
+    <section class="hero card">
+      <div class="hero-main">
+        <p class="eyebrow">Ainda posso gastar no <span class="cardname">Inter</span> em <span id="hMes"></span> <span id="hTag"></span></p>
+        <p class="big" id="hRestante">—</p>
+        <div class="bar" role="progressbar" aria-label="Uso do teto"><span id="hBar"></span></div>
+        <p class="muted" id="hResumo"></p>
+      </div>
+      <div class="hero-side">
+        <label for="gastoManual" class="muted">Já gastei no Inter neste mês (valor do app)</label>
+        <input id="gastoManual" type="number" step="0.01" min="0" placeholder="vazio = aba Lançamentos">
+        <p class="muted small">Fica salvo só neste navegador.</p>
+      </div>
+    </section>
 
-  <section class="grid2">
-    <div class="card">
-      <h2>Estimativa do mês</h2>
-      <table class="tbl" id="tEstimativa"></table>
-    </div>
-    <div class="card">
-      <h2>Reserva de emergência</h2>
-      <div id="reserva"></div>
-    </div>
-  </section>
+    <section class="kpis" id="kpis"></section>
 
-  <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras. Inter à vista + parcelas novas + fora do Inter (13º livre e férias) + VR.</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
-  <section class="grid2">
-    <div class="card"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>
-    <div class="card"><h2>Aporte na reserva x meta</h2><div class="chart"><canvas id="cAporte"></canvas></div></div>
-  </section>
-  <section class="grid2">
-    <div class="card"><h2>Limite do Inter a configurar x fatura</h2><div class="chart"><canvas id="cLimite"></canvas></div></div>
-    <div class="card"><h2>Faturas por cartão</h2><div class="chart"><canvas id="cFaturas"></canvas></div></div>
-  </section>
-  <section class="grid2">
-    <div class="card"><h2>Para onde vai a renda</h2><p class="muted small">Fixos, parcelas e compras, antes das compras novas do plano.</p><div class="chart"><canvas id="cRenda"></canvas></div></div>
-    <div class="card"><h2>Sobra do mês (antes de compras novas)</h2><div class="chart"><canvas id="cSobra"></canvas></div></div>
-  </section>
+    <section class="card" id="itemCard" hidden>
+      <div class="row-between"><h2 id="itemTitulo">Item</h2><p class="muted small" id="itemInfo"></p></div>
+      <div class="kpis" id="itemKpis"></div>
+      <div class="chart"><canvas id="cItem"></canvas></div>
+    </section>
 
-  <section class="card">
-    <div class="row-between"><h2>Dívidas e parcelamentos</h2><p class="muted small" id="dResumo"></p></div>
-    <div class="chart tall"><canvas id="cDividas"></canvas></div>
-    <div class="tblwrap"><table class="tbl" id="tDividas"></table></div>
-  </section>
+    <section class="grid2">
+      <div class="card"><h2>Estimativa do mês</h2><table class="tbl" id="tEstimativa"></table></div>
+      <div class="card"><h2>Reserva de emergência</h2><div id="reserva"></div></div>
+    </section>
 
-  <section class="card" id="catCard">
-    <h2>Meu custo por categoria</h2><p class="muted small" id="catNota"></p>
-    <div class="chart tall"><canvas id="cCat"></canvas></div>
-  </section>
+    <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: Inter à vista + parcelas novas + fora do Inter (13º livre e férias) + VR.</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
+    <section class="grid2">
+      <div class="card"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>
+      <div class="card"><h2>Aporte na reserva x meta</h2><div class="chart"><canvas id="cAporte"></canvas></div></div>
+    </section>
+    <section class="grid2">
+      <div class="card"><h2>Limite do Inter a configurar x fatura</h2><div class="chart"><canvas id="cLimite"></canvas></div></div>
+      <div class="card"><h2>Faturas por cartão</h2><div class="chart"><canvas id="cFaturas"></canvas></div></div>
+    </section>
+    <section class="grid2">
+      <div class="card"><h2>Para onde vai o dinheiro</h2><p class="muted small">Valor cheio que sai da conta. Os reembolsos entram como entrada.</p><div class="chart"><canvas id="cRenda"></canvas></div></div>
+      <div class="card"><h2>Sobra do mês (antes das compras novas)</h2><div class="chart"><canvas id="cSobra"></canvas></div></div>
+    </section>
+    <section class="card" id="catCard">
+      <h2>Meu custo por categoria</h2><p class="muted small" id="catNota"></p>
+      <div class="chart tall"><canvas id="cCat"></canvas></div>
+    </section>
+  </div>
+
+  <!-- ============ DÍVIDAS E CONTAS ============ -->
+  <div class="tab" id="tab-dividas" hidden>
+    <section class="card">
+      <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><p class="muted small" id="rResumo"></p></div>
+      <div class="tblwrap"><table class="tbl" id="tReceber"></table></div>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Contas fixas do mês</h2><p class="muted small" id="fResumo"></p></div>
+      <div class="tblwrap"><table class="tbl" id="tFixos"></table></div>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Parcelamentos</h2><p class="muted small" id="dResumo"></p></div>
+      <div class="chart tall"><canvas id="cDividas"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tDividas"></table></div>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Lançamentos do mês</h2><p class="muted small" id="lResumo"></p></div>
+      <div class="tblwrap"><table class="tbl" id="tLanc"></table></div>
+    </section>
+  </div>
+
+  <!-- ============ SIMULAÇÃO ============ -->
+  <div class="tab" id="tab-sim" hidden>
+    <section class="card sim-top">
+      <div class="f"><label for="sMes">Mês das compras</label><select id="sMes"></select></div>
+      <div class="f"><label for="sRenda">Entrada do mês (salário + 13º + férias + extras)</label><input id="sRenda" type="number" step="0.01"></div>
+      <button class="btn ghost" id="sReset">Voltar aos valores da planilha</button>
+      <p class="muted small" id="sNota" style="flex-basis:100%;margin:0"></p>
+    </section>
+    <section class="kpis" id="sKpis"></section>
+    <section class="card">
+      <h2>Para onde vai o dinheiro</h2>
+      <div class="stack" id="sStack"></div>
+      <div class="legend" id="sLegend"></div>
+      <p id="sAviso"></p>
+    </section>
+    <section class="grid2">
+      <div class="card">
+        <div class="row-between"><h2>Obrigatórios (meu custo)</h2><span class="muted small" id="sObTot"></span></div>
+        <p class="muted small">Não dá para simular abaixo do valor atual. Só dá para subir (ex.: conta de luz mais alta).</p>
+        <div id="sOb"></div>
+      </div>
+      <div class="card">
+        <div class="row-between"><h2>Gastos do mês e reserva</h2><span class="muted small" id="sVarTot"></span></div>
+        <p class="muted small" id="sVarNota"></p>
+        <div id="sVar"></div>
+      </div>
+    </section>
+  </div>
 </main>
-<footer class="muted small">Os dados vêm da planilha. Estimativas de 13º e férias seguem o que estiver na aba "13º e Férias".</footer>
+<footer class="muted small">Os dados vêm da planilha. O mês de referência vira no 5º dia útil (sábado conta como dia útil, feriados não).</footer>
 
 <script>
 /* Carrega as bibliotecas da pasta vendor/ ou, se não existir, da raiz do repositório */
@@ -99,7 +156,7 @@
     if (i >= libs.length) return;
     var name = libs[i], tries = /^(config|app)\.js$/.test(name) ? [name] : ["vendor/" + name, name];
     (function attempt(k) {
-      var s = document.createElement("script"); s.src = tries[k];
+      var s = document.createElement("script"); s.src = tries[k] + (/^(config|app)/.test(name) ? "?v=" + Date.now() : "");
       s.onload = function () { load(i + 1); };
       s.onerror = function () {
         if (k + 1 < tries.length) attempt(k + 1);
