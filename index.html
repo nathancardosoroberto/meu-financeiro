@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <header class="top">
@@ -46,6 +46,7 @@
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="geral" class="on">Visão geral</button>
   <button role="tab" data-tab="dividas">Dívidas e contas</button>
+  <button role="tab" data-tab="metas">Metas e cortes</button>
   <button role="tab" data-tab="sim">Simulação</button>
 </nav>
 
@@ -83,7 +84,12 @@
       </div>
     </section>
 
+    <section class="card" id="saude"></section>
     <section class="grid2" id="formas"></section>
+    <section class="grid2">
+      <div class="card"><div class="row-between"><h2>Ritmo do mês</h2><span class="muted small">gasto por dia x ritmo ideal</span></div><div class="chart"><canvas id="cRitmo"></canvas></div><p id="ritmoTxt"></p></div>
+      <div class="card"><div class="row-between"><h2>Limites por categoria</h2><span class="muted small" id="limResumo"></span></div><div id="limites"></div><p class="muted small">Limites na aba Metas e Cortes. Gasto = compras do mês na aba Lançamentos (sem VR, já sem reembolsos).</p></div>
+    </section>
     <section class="kpis" id="kpis"></section>
 
     <section class="card" id="itemCard" hidden>
@@ -121,6 +127,9 @@
     <section class="card">
       <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><p class="muted small" id="rResumo"></p></div>
       <div class="tblwrap"><table class="tbl" id="tReceber"></table></div>
+      <h3 class="h3">Recebido x pendente</h3>
+      <div class="tblwrap"><table class="tbl" id="tRecebido"></table></div>
+      <p id="recAviso"></p>
     </section>
     <section class="card">
       <div class="row-between"><h2>Contas fixas do mês</h2><p class="muted small" id="fResumo"></p></div>
@@ -132,8 +141,41 @@
       <div class="tblwrap"><table class="tbl" id="tDividas"></table></div>
     </section>
     <section class="card">
+      <div class="row-between"><h2>Quando as parcelas acabam</h2><span class="muted small">minha parte das parcelas, mês a mês</span></div>
+      <div class="chart"><canvas id="cLibera"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tLibera"></table></div>
+    </section>
+    <section class="card">
+      <h2>Previsto x realizado</h2>
+      <p class="muted small">Faturas: o que a planilha previa antes x o valor atual (ou o real, depois de fechada).</p>
+      <div class="tblwrap"><table class="tbl" id="tPrevFat"></table></div>
+      <p class="muted small" style="margin-top:14px">Gastos do dia a dia: planejado x lançado, por mês das compras.</p>
+      <div class="tblwrap"><table class="tbl" id="tPrevGasto"></table></div>
+    </section>
+    <section class="card">
       <div class="row-between"><h2>Lançamentos do mês</h2><p class="muted small" id="lResumo"></p></div>
       <div class="tblwrap"><table class="tbl" id="tLanc"></table></div>
+    </section>
+  </div>
+
+  <!-- ============ METAS E CORTES ============ -->
+  <div class="tab" id="tab-metas" hidden>
+    <section class="card">
+      <h2>Metas de reserva</h2>
+      <p class="muted small">A reserva enche as metas na ordem de prioridade. Cadastre e edite na aba Metas e Cortes da planilha.</p>
+      <div id="metas"></div>
+      <div class="chart tall" style="margin-top:12px"><canvas id="cMetas"></canvas></div>
+      <p class="muted small" id="rendNota"></p>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Assinaturas</h2><span class="muted small" id="assResumo"></span></div>
+      <div class="tblwrap"><table class="tbl" id="tAss"></table></div>
+      <p id="assAviso"></p>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Onde mais gasto (últimos 3 meses)</h2><span class="muted small" id="recResumo"></span></div>
+      <div class="tblwrap"><table class="tbl" id="tRec"></table></div>
+      <p id="recAviso2"></p>
     </section>
   </div>
 

@@ -82,7 +82,7 @@
     // Plano de Gastos
     const pl = rows(wb, PG);
     const ph = findRow(pl, (t) => t === "Mês das compras");
-    const K = ["mes","fatura","espaco","teto","semana","vista","parc","vezes","parcMax","simult","fora","vr","total","faturaInter","limite","reserva","reservaAc","ja","ainda","meta","livre","livreResta"];
+    const K = ["mes","fatura","espaco","teto","semana","vista","parc","vezes","parcMax","simult","fora","vr","total","faturaInter","limite","reserva","reservaAc","ja","ainda","meta","livre","livreResta","reservaRend"];
     D.plano = {};
     for (let i = ph + 1; i < pl.length; i++) {
       const r = pl[i]; if (!r || txt(r[0]).startsWith("TOTAL")) break; const k = ym(r[0]); if (!k) continue;
@@ -104,12 +104,29 @@
     if (wb.Sheets["Lançamentos"]) { const lg = rows(wb, "Lançamentos"); const lh = findRow(lg, (t) => t === "Data da compra");
       for (let i = lh + 1; i < lg.length; i++) { const r = lg[i]; if (!r) continue; const dt = toDate(r[0]); if (!dt || !num(r[4])) continue;
         D.lanc.push({ data: ymd(dt), desc: txt(r[1]) || "(sem descrição)", cat: txt(r[2]), paga: txt(r[3]), total: num(r[4]), parcelado: txt(r[5]) === "Sim", n: num(r[6]) || 1,
-          ini: ym(r[12]), fim: ym(r[13]), valor: num(r[14]), r1: num(r[15]), q1: txt(r[9]), r2: num(r[16]), q2: txt(r[11]), custo: num(r[17]) }); } }
+          ini: ym(r[12]), fim: ym(r[13]), valor: num(r[14]), r1: num(r[15]), q1: txt(r[9]), r2: num(r[16]), q2: txt(r[11]), custo: num(r[17]), meuTotal: num(r[4]) - num(r[8]) - num(r[10]) }); } }
     // Categorias
     const rs = rows(wb, "Resumo mensal"); const rh = findRow(rs, (t) => t === "Mês");
     const rmeses = rs[rh].slice(1, 13).map(ym); const ci = findRow(rs, (t) => t.startsWith("MEU CUSTO REAL POR CATEGORIA"));
     D.cat = { meses: rmeses, itens: {} };
     for (let i = ci + 1; i < rs.length; i++) { const t = txt(rs[i] && rs[i][0]); if (!t) continue; if (t === "TOTAL") break; D.cat.itens[t] = { vals: rs[i].slice(1, 13), media: num(rs[i][13]) }; }
+    // Metas e Cortes
+    D.mc = { rend: 0, custo: 0, limites: [], metas: [], ass: [] };
+    if (wb.Sheets["Metas e Cortes"]) { const mt = rows(wb, "Metas e Cortes");
+      D.mc.rend = num(cell(wb, "Metas e Cortes", "B4")); D.mc.custo = num(cell(wb, "Metas e Cortes", "B5"));
+      const sec = (pref) => findRow(mt, (t) => t.startsWith(pref));
+      let i = sec("LIMITES POR CATEGORIA"); if (i >= 0) for (let r = i + 2; r < mt.length; r++) { const t = txt(mt[r] && mt[r][0]); if (!t || t === "TOTAL") break; D.mc.limites.push({ cat: t, lim: num(mt[r][1]) }); }
+      i = sec("METAS DE RESERVA"); if (i >= 0) for (let r = i + 2; r < mt.length; r++) { const x = mt[r] || []; const t = txt(x[0]); if (t.startsWith("INDICADORES")) break; if (!t) continue;
+        D.mc.metas.push({ nome: t, obj: num(x[1]), prazo: ym(x[2]), prio: num(x[3]) || 99 }); }
+      i = sec("ASSINATURAS"); if (i >= 0) for (let r = i + 2; r < mt.length; r++) { const x = mt[r] || []; const t = txt(x[0]); if (t === "TOTAL") break; if (!t) continue;
+        D.mc.ass.push({ nome: t, paga: txt(x[1]), valor: num(x[2]), ano: num(x[3]), ate: ym(x[4]) || txt(x[4]), manter: txt(x[5]) || "Avaliar" }); } }
+    // Faturas (previsto x real)
+    D.fats = [];
+    if (wb.Sheets["Faturas"]) rows(wb, "Faturas").slice(3).forEach((x) => { const m = ym(x && x[0]); if (m && txt(x[1])) D.fats.push({ mes: m, card: txt(x[1]), valor: num(x[2]), status: txt(x[3]), prev: num(x[4]) }); });
+    // Reembolsos recebidos
+    D.recebido = {};
+    if (wb.Sheets["Reembolsos"]) { const re = rows(wb, "Reembolsos"); const ri = findRow(re, (t) => t.startsWith("RECEBIDO"));
+      if (ri >= 0) { const ms = re[ri].slice(1).map(ym); for (let r = ri + 1; r < ri + 6; r++) { const p = txt(re[r] && re[r][0]); if (!p || p === "-") continue; D.recebido[p] = {}; ms.forEach((m, n) => { if (m && num(re[r][n + 1])) D.recebido[p][m] = num(re[r][n + 1]); }); } } }
     return D;
   }
 
@@ -152,7 +169,7 @@
   let TAB = "geral";
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
     TAB = b.dataset.tab; document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-    ["geral", "dividas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
+    ["geral", "dividas", "metas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
     $("filtros").style.display = TAB === "sim" ? "none" : ""; renderAll();
   }));
 
@@ -305,7 +322,7 @@
 
   // ---------- render ----------
   function renderAll() { if (!DATA) return; resumoFiltros(); renderTopo(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
-    if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else renderSim(); }
+    if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else if (TAB === "metas") renderMetas(); else renderSim(); }
 
   function renderTopo() {
     const ms = DATA.meses.filter((k) => DATA.plano[k]); if (ms.length < 2) return;
@@ -387,7 +404,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderFormas(k);
+    renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k);
     const kp = [
       ["Fora do Inter disponível", R(p.fora), "13º livre + férias (Pix/débito)"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
@@ -505,6 +522,134 @@
     $("lResumo").textContent = lc.length ? `${lc.length} lançamento(s) cobrados em ${lab(k)} · ${R(tl)}` : "Nenhum lançamento cobrado neste mês. Adicione na aba Lançamentos da planilha.";
     $("tLanc").innerHTML = `<tr><th>Descrição</th><th>Data</th><th>Forma</th><th>Valor total</th><th>Parcelas</th><th>Cobrado no mês</th><th>Meu custo</th></tr>` +
       lc.map((l) => `<tr><td>${esc(l.desc)}</td><td>${l.data.split("-").reverse().join("/")}</td><td>${esc(l.paga)}</td><td>${R(l.total)}</td><td>${l.parcelado ? (diffM(l.ini, k) + 1) + "/" + l.n : "à vista"}</td><td>${R(l.valor)}</td><td>${R(l.custo)}</td></tr>`).join("");
+    renderRecebidos(k); renderLibera(k); renderPrevReal();
+  }
+
+  // ---------- saúde financeira, ritmo, limites ----------
+  const semVR = (l) => l.paga !== "VR";
+  const lancMes = (k) => DATA.lanc.filter((l) => l.data.slice(0, 7) === k && semVR(l));
+  const custoEss = () => DATA.mc.custo || (DATA.fixos.filter((f) => ativo(f, F.mes)).reduce((s, f) => s + f.custo, 0) + (DATA.minMes || 0));
+  function parcelasMeu(m) { return DATA.dividas.filter((d) => ativo(d, m)).reduce((s, d) => s + d.custo, 0) + DATA.lanc.filter((l) => l.parcelado && l.ini && l.ini <= m && l.fim >= m).reduce((s, l) => s + l.custo, 0); }
+  function semaforo(v, bom, medio, maior) { const ok = maior ? v >= bom : v <= bom, mid = maior ? v >= medio : v <= medio; return ok ? "ok" : mid ? "mid" : "bad"; }
+  function renderSaude(k) {
+    const Fm = addM(k, 1), j = idx(Fm), sal = j >= 0 ? DATA.proj.renda[j] : 0, p = DATA.plano[k] || {};
+    const parc = parcelasMeu(Fm), pp = sal ? parc / sal : 0, meses = (p.reservaAc || 0) / (custoEss() || 1), poup = sal ? (p.reserva || 0) / sal : 0;
+    const it = [
+      ["Parcelas ÷ salário", P(pp), "minha parte " + R0(parc) + " de " + R0(sal) + " · ideal até 30%", semaforo(pp, 0.3, 0.45, false)],
+      ["Meses cobertos pela reserva", meses.toFixed(1).replace(".", ","), "reserva " + R0(p.reservaAc) + " ÷ custo essencial " + R0(custoEss()) + " · ideal 6", semaforo(meses, 6, 3, true)],
+      ["Salário que vai para a reserva", P(poup), R0(p.reserva) + " no mês · meta " + P(DATA.pct), semaforo(poup, DATA.pct - 0.001, 0.05, true)]];
+    $("saude").innerHTML = `<div class="row-between"><h2>Saúde financeira</h2><p class="muted small">compras de ${lab(k)}, pagas com o salário de ${lab(Fm)}</p></div><div class="kpis">` +
+      it.map(([l, v, s, c]) => `<div class="kpi sem ${c}"><div class="l"><i></i>${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("") + "</div>";
+  }
+  function renderRitmo(k) {
+    const [y, m] = k.split("-").map(Number), dias = new Date(y, m, 0).getDate(), hoje = new Date();
+    const atual = hoje.getFullYear() === y && hoje.getMonth() + 1 === m, passado = new Date(y, m, 0, 23) < hoje;
+    const ate = atual ? hoje.getDate() : passado ? dias : 0;
+    const p = DATA.plano[k] || {}, ref = p.teto || DATA.minMes || 0, refNome = p.teto ? "sugerido" : "mínimo";
+    const ls = lancMes(k), porDia = Array(dias).fill(0); ls.forEach((l) => (porDia[+l.data.slice(8, 10) - 1] += l.meuTotal));
+    let acc = 0; const cum = porDia.map((v, n) => (acc += v, n < ate ? Math.round(acc * 100) / 100 : null));
+    const gasto = ate ? cum[ate - 1] : 0, ideal = porDia.map((_, n) => Math.round((ref * (n + 1)) / dias * 100) / 100);
+    const cor = pal(), labs = porDia.map((_, n) => String(n + 1));
+    draw("cRitmo", "line", labs, [
+      ds("Gasto acumulado", cum, cor[0], { fill: false, borderWidth: 2.5, pointRadius: 0, tension: 0.15, datalabels: { display: (c) => c.dataIndex === ate - 1, align: "top" } }),
+      ds("Ritmo ideal (" + refNome + " " + R0(ref) + ")", ideal, css("--muted"), { fill: false, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, datalabels: { display: false } })],
+      baseOpts(false, (v) => R0(v)));
+    let t;
+    if (!ate) t = `Mês ainda não começou. O ritmo ideal é ${R0(ref / (dias / 7))} por semana.`;
+    else { const proj = atual ? (gasto / ate) * dias : gasto, idealHoje = ideal[ate - 1];
+      t = `Até ${atual ? "hoje (dia " + ate + ")" : "o fim do mês"}: ${R(gasto)} gastos (sem VR), contra ${R(idealHoje)} do ritmo ideal. ` +
+        (atual ? `Nesse ritmo você fecha ${lab(k)} em <b>${R(proj)}</b> (${refNome} ${R0(ref)}). ` : "") +
+        (proj > ref + 0.5 ? `<span class="icon-bad">${atual ? "Vai passar" : "Passou"} ${R(proj - ref)} do ${refNome}.</span>` : `<span class="icon-ok">Dentro do ${refNome}.</span>`); }
+    $("ritmoTxt").innerHTML = t + (ls.length ? "" : ` <span class="muted">Sem lançamentos neste mês na aba Lançamentos.</span>`);
+  }
+  function renderLimites(k) {
+    const ls = lancMes(k), g = {}; ls.forEach((l) => (g[l.cat || "Outros"] = (g[l.cat || "Outros"] || 0) + l.meuTotal));
+    const lims = DATA.mc.limites.slice(); Object.keys(g).forEach((c) => { if (!lims.some((x) => x.cat === c)) lims.push({ cat: c, lim: 0, extra: 1 }); });
+    const totL = lims.reduce((s, x) => s + x.lim, 0), totG = Object.values(g).reduce((s, v) => s + v, 0);
+    $("limResumo").textContent = `${lab(k)} · ${R0(totG)} de ${R0(totL)} (${P(totL ? totG / totL : 0)})`;
+    $("limites").innerHTML = lims.filter((x) => x.lim > 0 || g[x.cat]).map((x) => { const v = g[x.cat] || 0, u = x.lim ? v / x.lim : v > 0 ? 2 : 0;
+      const c = u > 1 ? css("--bad") : u >= 0.8 ? css("--s4") : css("--good");
+      return `<div class="meter"><div class="t"><span>${esc(x.cat)}${x.extra ? ' <span class="muted small">(sem limite)</span>' : ""}</span><span>${R0(v)} / ${x.lim ? R0(x.lim) : "—"}${u > 1 && x.lim ? ' <b style="color:' + css("--bad") + '">+' + R0(v - x.lim) + "</b>" : ""}</span></div>
+        <div class="bar"><span style="width:${Math.min(100, u * 100)}%;background:${c}"></span></div></div>`; }).join("") ||
+      `<p class="muted">Defina os limites na aba Metas e Cortes da planilha.</p>`;
+  }
+  // ---------- reembolsos recebidos, parcelas que acabam, previsto x real ----------
+  function devidoPessoa(m) { const o = {}; receber(m).forEach((r) => (o[r.pessoa] = (o[r.pessoa] || 0) + r.valor)); return o; }
+  function pendencias(k) {
+    const pessoas = new Set(Object.keys(DATA.recebido)); DATA.meses.forEach((m) => Object.keys(devidoPessoa(m)).forEach((p) => pessoas.add(p)));
+    const mes = {}, atras = {};
+    pessoas.forEach((p) => { const d = devidoPessoa(k)[p] || 0, r = (DATA.recebido[p] || {})[k] || 0; mes[p] = { d, r, pend: Math.max(0, d - r) };
+      atras[p] = DATA.meses.filter((m) => m < REF.mes).reduce((s, m) => s + Math.max(0, (devidoPessoa(m)[p] || 0) - ((DATA.recebido[p] || {})[m] || 0)), 0); });
+    return { mes, atras };
+  }
+  function renderRecebidos(k) {
+    const { mes, atras } = pendencias(k);
+    $("tRecebido").innerHTML = `<tr><th>Pessoa</th><th>Devido em ${lab(k)}</th><th>Recebido</th><th>Pendente</th><th>Atrasado (meses anteriores)</th></tr>` +
+      Object.entries(mes).filter(([p, o]) => o.d || o.r || atras[p]).map(([p, o]) => `<tr><td>${esc(p)}</td><td>${R(o.d)}</td><td class="${o.r >= o.d - 0.005 && o.d ? "pos" : ""}">${R(o.r)}</td><td class="${o.pend > 0.005 ? "neg" : ""}">${R(o.pend)}</td><td class="${atras[p] > 0.005 ? "neg" : ""}">${R(atras[p])}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nada a receber neste mês.</td></tr>`;
+    const tA = Object.values(atras).reduce((s, v) => s + v, 0);
+    $("recAviso").innerHTML = tA > 0.005 ? `<span class="icon-bad">Tem ${R(tA)} de reembolso atrasado. Cobre e marque no bloco RECEBIDO da aba Reembolsos.</span>` : `<span class="muted small">Quando alguém te pagar, preencha o bloco RECEBIDO da aba Reembolsos da planilha.</span>`;
+  }
+  function renderLibera(k) {
+    const ms = DATA.meses.filter((m) => m >= addM(k, 1)), v = ms.map((m) => Math.round(parcelasMeu(m) * 100) / 100), cor = pal();
+    const cl = draw("cLibera", "line", ms.map(lab), [ds("Minhas parcelas por mês", v, cor[1], { fill: true, backgroundColor: cor[1] + "33", stepped: true, borderWidth: 2, pointRadius: 0,
+      datalabels: { display: (c) => c.dataIndex === 0 || v[c.dataIndex] !== v[c.dataIndex - 1], align: "top" } })], baseOpts(false, (x) => R0(x)));
+    cl.options.plugins.legend.display = false; cl.update();
+    const quedas = [];
+    for (let n = 1; n < ms.length; n++) { const dif = v[n - 1] - v[n]; if (dif > 5) {
+      const fim = ms[n - 1], itens = DATA.dividas.filter((d) => d.fim === fim && d.custo > 0).map((d) => d.desc).concat(DATA.lanc.filter((l) => l.parcelado && l.fim === fim).map((l) => l.desc));
+      quedas.push(`<tr><td>${lab(ms[n])}</td><td class="pos">+${R(dif)}/mês</td><td>${R(v[n])}</td><td style="text-align:left">${esc(itens.slice(0, 4).join(", "))}${itens.length > 4 ? " +" + (itens.length - 4) : ""}</td></tr>`); } }
+    $("tLibera").innerHTML = `<tr><th>A partir de</th><th>Libera</th><th>Parcelas no mês</th><th>O que termina</th></tr>` + (quedas.join("") || `<tr><td colspan="4" class="muted">Nenhuma parcela termina no período.</td></tr>`);
+  }
+  function renderPrevReal() {
+    const fs = DATA.fats.filter((f) => f.prev > 0);
+    const linhas = fs.map((f) => { const j = idx(f.mes), atual = f.status === "Fechada" ? f.valor : (DATA.faturas[f.card] || [])[j] ?? f.valor, dif = atual - f.prev;
+      return `<tr><td>${lab(f.mes)}</td><td>${esc(f.card)}</td><td>${R(f.prev)}</td><td>${R(atual)}</td><td class="${dif > 0.005 ? "neg" : dif < -0.005 ? "pos" : ""}">${dif > 0 ? "+" : ""}${R(dif)} (${P(f.prev ? dif / f.prev : 0)})</td><td>${f.status === "Fechada" ? "real (fechada)" : "previsão atual"}</td></tr>`; });
+    const ms = DATA.meses.filter((m) => m <= REF.mes && (DATA.plano[m] || {}).mes);
+    const gl = ms.map((m) => { const p = DATA.plano[m], g = lancMes(m).reduce((s, l) => s + l.meuTotal, 0), ref = p.teto || DATA.minMes || 0;
+      return `<tr><td>${lab(m)}</td><td>${R(ref)}${p.teto ? "" : " (mínimo)"}</td><td>${R(g)}</td><td class="${g > ref + 0.005 ? "neg" : "pos"}">${g > ref ? "+" : ""}${R(g - ref)}</td></tr>`; });
+    $("tPrevFat").innerHTML = `<tr><th>Fatura</th><th>Cartão</th><th>Previsto antes</th><th>Agora</th><th>Diferença</th><th>Situação</th></tr>` + (linhas.join("") || `<tr><td colspan="6" class="muted">Preencha "Previsão anterior" na aba Faturas para comparar.</td></tr>`);
+    $("tPrevGasto").innerHTML = `<tr><th>Mês das compras</th><th>Planejado</th><th>Gasto lançado (valor das compras, sem VR)</th><th>Diferença</th></tr>` + gl.join("");
+  }
+  // ---------- metas e cortes ----------
+  function renderMetas() {
+    const k = F.mes, ms = DATA.meses.filter((m) => DATA.plano[m]), cor = pal();
+    const metas = DATA.mc.metas.slice().sort((a, b) => a.prio - b.prio); let cum = 0;
+    const acM = (m) => (DATA.plano[m] || {}).reservaAc || 0, rdM = (m) => (DATA.plano[m] || {}).reservaRend || 0;
+    const quando = (alvo, f) => ms.find((m) => f(m) >= alvo - 0.005);
+    $("metas").innerHTML = metas.map((mt) => { const ini = cum; cum += mt.obj;
+      const hoje = Math.max(0, Math.min(mt.obj, DATA.reservaInformada - ini)), noMes = Math.max(0, Math.min(mt.obj, acM(k) - ini));
+      const q = quando(cum, acM), qr = quando(cum, rdM), noPrazo = mt.prazo ? acM(mt.prazo) : null, ok = noPrazo != null && noPrazo >= cum - 0.005;
+      return `<div class="meta-it"><div class="row-between"><b>${esc(mt.nome)}</b><span class="muted small">prioridade ${mt.prio} · objetivo ${R0(mt.obj)}${mt.prazo ? " até " + lab(mt.prazo) : ""}</span></div>
+        <div class="bar"><span style="width:${mt.obj ? (noMes / mt.obj) * 100 : 0}%;background:${noMes >= mt.obj - 0.01 ? css("--good") : cor[0]}"></span></div>
+        <div class="meta-l"><span>Hoje: <b>${R0(hoje)}</b> (${P(mt.obj ? hoje / mt.obj : 0)})</span><span>Fim de ${lab(k)}: <b>${R0(noMes)}</b> (${P(mt.obj ? noMes / mt.obj : 0)})</span>
+        <span>Atinge em <b>${q ? lab(q) : "depois de " + lab(ms[ms.length - 1])}</b>${qr && qr !== q ? ` <span class="muted">(com rendimento estimado: ${lab(qr)})</span>` : ""}</span>
+        ${mt.prazo ? `<span class="${ok ? "icon-ok" : "icon-warn"}">${ok ? "No prazo" : "Faltariam " + R0(cum - (noPrazo || 0)) + " no prazo"}</span>` : ""}</div></div>`; }).join("") || `<p class="muted">Cadastre metas na aba Metas e Cortes da planilha.</p>`;
+    const alvo = []; cum = 0; metas.forEach((mt) => { cum += mt.obj; alvo.push([mt.nome, cum]); });
+    draw("cMetas", "line", ms.map(lab), [
+      ds("Reserva prevista (plano)", ms.map(acM), cor[0], { fill: false, borderWidth: 2.5, pointRadius: 2, tension: 0.2, datalabels: { display: (c) => c.dataIndex % 4 === 3 || c.dataIndex === ms.length - 1, align: "top" } }),
+      ds("Com rendimento estimado de " + P(DATA.mc.rend) + " a.a. (projeção)", ms.map(rdM), cor[2], { fill: false, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, tension: 0.2, datalabels: { display: false } })]
+      .concat(alvo.map(([n, v], z) => ds("Meta: " + n.replace(/\s*\(.*\)/, ""), ms.map(() => v), css("--muted"), { fill: false, borderWidth: 1.5, borderDash: [2, 3], pointRadius: 0, datalabels: { display: false } }))),
+      baseOpts(false, (v) => R0(v), { layout: { padding: { right: 44, top: 8 } } }));
+    $("rendNota").textContent = `A linha tracejada verde é só uma projeção com ${P(DATA.mc.rend)} ao ano (ajuste na aba Metas e Cortes). O rendimento real depende da economia e não entra no plano.`;
+    // assinaturas
+    const as = DATA.mc.ass, tot = as.reduce((s, a) => s + a.valor, 0), ano = as.reduce((s, a) => s + a.ano, 0);
+    const eco = as.filter((a) => a.manter === "Não").reduce((s, a) => s + a.ano, 0), aval = as.filter((a) => a.manter === "Avaliar").reduce((s, a) => s + a.ano, 0);
+    $("assResumo").textContent = `${as.length} assinaturas · ${R(tot)}/mês · ${R0(ano)} nos próximos 12 meses`;
+    $("tAss").innerHTML = `<tr><th>Assinatura</th><th>Paga com</th><th>Por mês</th><th>Próximos 12 meses</th><th>Até</th><th>Manter?</th></tr>` +
+      as.slice().sort((a, b) => b.ano - a.ano).map((a) => `<tr><td>${esc(a.nome)}</td><td>${esc(a.paga)}</td><td>${R(a.valor)}</td><td>${R(a.ano)}</td><td>${/^\d{4}-\d\d$/.test(a.ate) ? lab(a.ate) : esc(a.ate)}</td><td><span class="tag ${a.manter === "Não" ? "bad" : a.manter === "Sim" ? "good" : ""}">${esc(a.manter)}</span></td></tr>`).join("") +
+      `<tr class="total"><td>Total</td><td></td><td>${R(tot)}</td><td>${R(ano)}</td><td></td><td></td></tr>`;
+    $("assAviso").innerHTML = (eco ? `<span class="icon-ok">Cancelando as marcadas "Não" você economiza ${R0(eco)} em 12 meses.</span><br>` : "") +
+      (aval ? `<span class="icon-warn">${R0(aval)} em 12 meses estão marcadas "Avaliar". Marque Sim ou Não na aba Metas e Cortes.</span>` : "");
+    // recorrentes
+    const fim = REF.mes, ini = addM(fim, -2), g = {};
+    DATA.lanc.filter((l) => semVR(l) && l.data.slice(0, 7) >= ini && l.data.slice(0, 7) <= fim).forEach((l) => { const n = l.desc.toUpperCase().replace(/\s+/g, " ").trim();
+      const o = g[n] || (g[n] = { n: l.desc, cat: l.cat, qt: 0, tot: 0 }); o.qt++; o.tot += l.meuTotal; });
+    const lst = Object.values(g).sort((a, b) => b.tot - a.tot).slice(0, 12);
+    $("recResumo").textContent = `compras de ${lab(ini)} a ${lab(fim)} (aba Lançamentos, sem VR)`;
+    $("tRec").innerHTML = `<tr><th>Onde</th><th>Categoria</th><th>Vezes</th><th>Total</th><th>Média por compra</th><th>Por mês</th></tr>` +
+      (lst.map((o) => `<tr><td>${esc(o.n)}</td><td>${esc(o.cat)}</td><td>${o.qt}</td><td>${R(o.tot)}</td><td>${R(o.tot / o.qt)}</td><td>${R(o.tot / Math.max(1, new Set(DATA.lanc.filter((l) => l.desc.toUpperCase().replace(/\s+/g, " ").trim() === o.n.toUpperCase().replace(/\s+/g, " ").trim()).map((l) => l.data.slice(0, 7))).size))}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sem lançamentos no período.</td></tr>`);
+    const freq = lst.filter((o) => o.qt >= 3);
+    $("recAviso2").innerHTML = freq.length ? `<span class="icon-warn">Compras frequentes: ${freq.map((o) => esc(o.n) + " (" + o.qt + "x, " + R0(o.tot) + ")").join(" · ")}. Pequenos gastos repetidos somam rápido.</span>` : "";
   }
 
   // ---------- simulação: novas compras e dívidas ----------

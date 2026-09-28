@@ -141,3 +141,15 @@ footer{padding:16px 24px 32px;text-align:center}
 .top-spark .l{font-size:11.5px;color:var(--muted)} .top-spark .v{font-size:17px;font-weight:750;color:var(--ink)}
 .tabs{background:var(--bg)}
 @media (max-width:700px){.top{padding:16px}.top-spark{margin-left:0;flex:1 1 100%;justify-content:space-between}.top .top-deco{width:100%;opacity:.1}.actions{flex:1 1 100%}.actions select{flex:1}}
+
+/* saúde, metas */
+.kpi.sem .l i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--muted);vertical-align:middle}
+.kpi.sem.ok{border-left:4px solid var(--good)} .kpi.sem.ok .l i{background:var(--good)}
+.kpi.sem.mid{border-left:4px solid var(--s4)} .kpi.sem.mid .l i{background:var(--s4)}
+.kpi.sem.bad{border-left:4px solid var(--bad)} .kpi.sem.bad .l i{background:var(--bad)}
+#saude .kpis{margin-top:4px}
+.h3{font-size:14px;margin:16px 0 4px}
+.meta-it{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.meta-it .bar{margin:8px 0}
+.meta-l{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:13.5px;color:var(--ink2)}
+.tag.bad{color:var(--bad);border-color:var(--bad)} .tag.good{color:var(--good);border-color:var(--good)}
