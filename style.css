@@ -81,3 +81,8 @@ footer{padding:16px 24px 32px;text-align:center}
 .sl input[type=number]{text-align:right}
 .sl .hint{grid-column:1 / -1;font-size:11.5px;color:var(--muted);margin-top:-2px}
 [hidden]{display:none !important}
+
+.forma{border-left:4px solid var(--accent)} .forma.cash{border-left-color:var(--s3)}
+.forma .big2{font-size:30px;font-weight:750;margin:2px 0} .forma .big2.neg{color:var(--bad)}
+.forma .linha{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--ink2);border-top:1px solid var(--line);padding:6px 0}
+.forma .quando{font-size:12.5px;color:var(--muted);margin:2px 0 8px}
