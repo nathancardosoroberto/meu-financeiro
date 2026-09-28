@@ -197,6 +197,18 @@
       if (diffM(F.de, F.ate) < 0) { const t = F.de; F.de = F.ate; F.ate = t; $("fDe").value = F.de; $("fAte").value = F.ate; }
       try { const s = Object.assign({}, F); delete s.mes; delete s.item; localStorage.setItem("dash-filtros", JSON.stringify(s)); } catch (_) {}
       renderAll(); }));
+  // filtros recolhíveis (fechados por padrão no celular)
+  const isMobile = () => window.matchMedia("(max-width: 700px)").matches;
+  let fAberto = null; try { fAberto = localStorage.getItem("dash-filtros-aberto"); } catch (_) {}
+  function setFiltros(open) { $("filtros").classList.toggle("collapsed", !open); $("fToggle").setAttribute("aria-expanded", open); $("fToggle").textContent = open ? "Fechar filtros ▴" : "Filtros ▾"; }
+  setFiltros(fAberto != null ? fAberto === "1" : !isMobile());
+  $("fToggle").addEventListener("click", () => { const open = $("filtros").classList.contains("collapsed"); setFiltros(open); try { localStorage.setItem("dash-filtros-aberto", open ? "1" : "0"); } catch (_) {} });
+  function resumoFiltros() {
+    const t = [lab(F.de) + "–" + lab(F.ate)];
+    if (F.cartao) t.push(F.cartao); if (F.divida !== "ativas") t.push($("fDivida").selectedOptions[0].text); if (F.reemb) t.push($("fReemb").selectedOptions[0].text);
+    if (F.item) t.push(F.item.slice(2)); if (F.unid === "pct") t.push("em %");
+    $("fAtivos").textContent = t.join(" · ");
+  }
   $("gastoManual").addEventListener("input", (e) => { try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + F.mes) : localStorage.setItem("gasto-" + F.mes, v); } catch (_) {} renderGeral(true); });
 
   // ---------- cálculos ----------
@@ -262,11 +274,36 @@
     if (o.indexAxis === "y") { o.scales.y.ticks = { color: ink, autoSkip: false }; o.scales.x.ticks = { color: ink, callback: (v) => fmtFn(v) }; o.scales.x.grid = { color: line }; o.scales.y.grid = { display: false }; o.layout = { padding: { right: 60 } }; }
     return o;
   }
-  function draw(id, type, labels, datasets, opts) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), { type, data: { labels, datasets }, options: opts }); return charts[id]; }
+  function draw(id, type, labels, datasets, opts) {
+    if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), { type, data: { labels, datasets }, options: opts });
+    charts[id]._raw = { type, labels, datasets, opts };
+    const box = $(id).parentElement;
+    if (!box.querySelector(".zoom")) { const b = document.createElement("button"); b.className = "zoom"; b.type = "button"; b.title = "Ampliar gráfico"; b.setAttribute("aria-label", "Ampliar gráfico"); b.textContent = "⤢"; b.addEventListener("click", (e) => { e.stopPropagation(); abrirZoom(id); }); box.appendChild(b); }
+    $(id).onclick = () => abrirZoom(id);
+    return charts[id];
+  }
+  let zoomChart = null;
+  function fecharZoom() { if (zoomChart) { zoomChart.destroy(); zoomChart = null; } const o = document.querySelector(".zoomov"); if (o) o.remove(); document.body.style.overflow = ""; }
+  function abrirZoom(id) {
+    const src = charts[id]; if (!src || !src._raw) return; fecharZoom(); const raw = src._raw;
+    const card = $(id).closest(".card"); const titulo = card && card.querySelector("h2") ? card.querySelector("h2").textContent : "Gráfico";
+    const ov = document.createElement("div"); ov.className = "zoomov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
+    ov.innerHTML = `<div class="zh"><h3>${esc(titulo)}</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div><div class="dica">Dica: gire o celular para ver o gráfico maior.</div><div class="zb"><div class="zc"><canvas id="zCanvas"></canvas></div></div>`;
+    document.body.appendChild(ov); document.body.style.overflow = "hidden";
+    $("zClose").addEventListener("click", fecharZoom);
+    const horiz = raw.opts.indexAxis === "y", n = raw.labels.length, zc = ov.querySelector(".zc");
+    if (horiz) zc.style.height = Math.max(ov.querySelector(".zb").clientHeight - 24, n * 30 + 80) + "px";
+    else { const minW = n * 64; if (minW > zc.clientWidth) zc.style.width = minW + "px"; }
+    const data = { labels: raw.labels.slice(), datasets: raw.datasets.map((d) => Object.assign({}, d, { data: d.data.slice() })) };
+    const opts = Object.assign({}, raw.opts, { maintainAspectRatio: false, animation: false });
+    opts.plugins = Object.assign({}, raw.opts.plugins, { legend: Object.assign({}, raw.opts.plugins.legend, { display: true }), datalabels: Object.assign({}, raw.opts.plugins.datalabels, { font: { size: 12, weight: "600" }, display: (c) => !!c.dataset.data[c.dataIndex] }) });
+    zoomChart = new Chart($("zCanvas"), { type: raw.type, data, options: opts });
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharZoom(); });
   const ds = (label, data, color, extra = {}) => Object.assign({ label, data, backgroundColor: color, borderColor: color, borderWidth: 0, borderRadius: 4, borderSkipped: "start", maxBarThickness: 46 }, extra);
 
   // ---------- render ----------
-  function renderAll() { if (!DATA) return; document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
+  function renderAll() { if (!DATA) return; resumoFiltros(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
     if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else renderSim(); }
 
   function renderHoje() {
