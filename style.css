@@ -115,3 +115,16 @@ footer{padding:16px 24px 32px;text-align:center}
   .tbl.est td:last-child,.tbl.est th:last-child{width:1%}
   .card{padding:14px 12px}
 }
+
+/* simulação de compras e dívidas */
+.simit{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.simit-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.simit-g{display:flex;flex-wrap:wrap;gap:10px}
+.simit-g .f{flex:1 1 140px} .simit-g .f.wide{flex:2 1 220px}
+.btn.sm{padding:4px 10px;font-size:13px}
+.sim-add{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.sim-modo{max-width:420px;margin-top:6px}
+#sRes{display:flex;flex-direction:column;gap:16px}
+.tbl tr.fora td{color:var(--muted)}
+@media (max-width:700px){.sim-add .btn{flex:1 1 100%}.simit-g .f{flex:1 1 45%}.simit-g .f.wide{flex-basis:100%}}
+@media (max-width:700px){#sKpis{grid-template-columns:1fr 1fr}#sKpis .kpi .v{font-size:18px}.sim-add .btn{flex:1 1 45%}}

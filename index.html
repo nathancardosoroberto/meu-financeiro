@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 <header class="top">
@@ -121,31 +121,28 @@
 
   <!-- ============ SIMULAÇÃO ============ -->
   <div class="tab" id="tab-sim" hidden>
-    <section class="card sim-top">
-      <div class="f"><label for="sMes">Mês das compras</label><select id="sMes"></select></div>
-      <div class="f"><label for="sRenda">Entrada do mês (salário + 13º + férias + extras)</label><input id="sRenda" type="number" step="0.01"></div>
-      <button class="btn ghost" id="sReset">Voltar aos valores da planilha</button>
-      <p class="muted small" id="sNota" style="flex-basis:100%;margin:0"></p>
-    </section>
-    <section class="kpis" id="sKpis"></section>
     <section class="card">
-      <h2>Para onde vai o dinheiro</h2>
-      <div class="stack" id="sStack"></div>
-      <div class="legend" id="sLegend"></div>
-      <p id="sAviso"></p>
-    </section>
-    <section class="grid2">
-      <div class="card">
-        <div class="row-between"><h2>Obrigatórios (meu custo)</h2><span class="muted small" id="sObTot"></span></div>
-        <p class="muted small">Não dá para simular abaixo do valor atual. Só dá para subir (ex.: conta de luz mais alta).</p>
-        <div id="sOb"></div>
+      <h2>O que você quer simular?</h2>
+      <p class="muted small">Teste uma compra ou dívida antes de fazer. Nada muda na planilha: a simulação fica só neste navegador. Compras no cartão em um mês são pagas com o salário do mês seguinte (5º dia útil).</p>
+      <div id="sItens"></div>
+      <div class="sim-add">
+        <button type="button" class="btn" data-add="parc">+ Compra parcelada no cartão</button>
+        <button type="button" class="btn" data-add="vista">+ Compra à vista no cartão</button>
+        <button type="button" class="btn" data-add="div">+ Nova dívida</button>
+        <button type="button" class="btn ghost" id="sLimpar">Limpar tudo</button>
       </div>
-      <div class="card">
-        <div class="row-between"><h2>Gastos do mês e reserva</h2><span class="muted small" id="sVarTot"></span></div>
-        <p class="muted small" id="sVarNota"></p>
-        <div id="sVar"></div>
-      </div>
+      <div class="f sim-modo"><label for="sModo">De onde sai o dinheiro da parcela? (orçamento = protege a reserva · reserva = mantém o que dá para gastar)</label>
+        <select id="sModo"><option value="orc">Do orçamento de gastos</option><option value="res">Da reserva</option></select></div>
     </section>
+    <div id="sRes" hidden>
+      <section class="kpis" id="sKpis"></section>
+      <section class="card"><h2>Como fica o planejamento</h2><p id="sAviso"></p></section>
+      <section class="grid2">
+        <div class="card"><h2>Dinheiro livre de cada mês</h2><p class="muted small">Mês das compras. O que era livre se divide entre a nova parcela, o que dá para gastar e o que vai para a reserva.</p><div class="chart"><canvas id="cSimLivre"></canvas></div></div>
+        <div class="card"><h2>Reserva acumulada</h2><p class="muted small">Com e sem a simulação.</p><div class="chart"><canvas id="cSimRes"></canvas></div></div>
+      </section>
+      <section class="card"><h2>Mês a mês</h2><p class="muted small">Valor cinza = como está hoje · em negrito = com a simulação.</p><div class="tblwrap"><table class="tbl" id="tSim"></table></div></section>
+    </div>
   </div>
 </main>
 <footer class="muted small">Os dados vêm da planilha. O mês de referência vira no 5º dia útil (sábado conta como dia útil, feriados não).</footer>

@@ -188,8 +188,7 @@
     opt($("fItem"), itensLista(), F.item);
     document.querySelectorAll(".cardname").forEach((e) => (e.textContent = DATA.cartoes[0] || "Inter"));
     // simulação
-    const simDef = DATA.plano[def] && DATA.plano[def].teto > 0 ? def : clamp(addM(def, 1));
-    opt($("sMes"), ms, simDef);
+    SIM_DEF = DATA.plano[def] && DATA.plano[def].teto > 0 ? def : clamp(addM(def, 1)); SIM = null;
     renderAll();
   }
   [["fMes","mes"],["fDe","de"],["fAte","ate"],["fCartao","cartao"],["fDivida","divida"],["fReemb","reemb"],["fItem","item"],["fUnid","unid"]].forEach(([id, k]) =>
@@ -498,78 +497,146 @@
       lc.map((l) => `<tr><td>${esc(l.desc)}</td><td>${l.data.split("-").reverse().join("/")}</td><td>${esc(l.paga)}</td><td>${R(l.total)}</td><td>${l.parcelado ? (diffM(l.ini, k) + 1) + "/" + l.n : "à vista"}</td><td>${R(l.valor)}</td><td>${R(l.custo)}</td></tr>`).join("");
   }
 
-  // ---------- simulação ----------
-  const VARS = [["Lazer", 0.35], ["Delivery/Restaurante", 0.25], ["Compras/Vestuário", 0.2], ["Outros", 0.2], ["Mercado (além do VR)", 0]];
-  let SIM = null;
-  function simBase(k) {
-    const i = idx(k), pr = DATA.proj, p = DATA.plano[k] || {};
-    const F = DATA.meses.includes(addM(k, 1)) ? addM(k, 1) : k, j = idx(F);
-    // reembolsos de contas que eu não pago mais (ex.: Prime anual já pago) entram como entrada
-    const creditos = DATA.fixos.filter((f) => ativo(f, F) && f.custo < 0).reduce((s, f) => s - f.custo, 0);
-    const renda = pr.renda[j] + pr.ajuste[j] + pr.d13[i] + pr.ferias[i] + creditos;
-    const ob = [];
-    DATA.fixos.filter((f) => ativo(f, F) && f.custo > 0).forEach((f) => ob.push([f.desc, f.custo]));
-    let outros = 0;
-    DATA.dividas.filter((d) => ativo(d, F) && d.custo > 0).forEach((d) => (/a identificar/.test(d.desc) ? (outros += d.custo) : ob.push([d.desc, d.custo])));
-    if (outros) ob.push(["Outras parcelas nos cartões", outros]);
-    const lanc = DATA.lanc.filter((l) => l.ini && l.ini <= F && l.fim >= F).reduce((s, l) => s + l.custo, 0);
-    const ja = p.ja || 0;
-    if (lanc - ja > 0.5) ob.push(["Compras já lançadas (outros meses)", lanc - ja]);
-    const x = Math.abs(pr.variaveis[j]) - lanc; if (x > 0.5) ob.push(["Outras cobranças previstas nas faturas", x]);
-    // meta = 15% do líquido + parte do 13º/férias que o plano manda para a reserva
-    const cent = (x) => Math.round(x * 100) / 100;
-    const obTot = ob.reduce((s, o) => s + o[1], 0);
-    const shares = Math.max(0, (p.reserva || 0) - ((p.espaco || 0) - (p.teto || 0)));
-    const metaT = cent((p.meta || 0) + shares);
-    const sug = p.teto ? cent(Math.max(DATA.minMes || 0, renda - obTot - metaT)) : 0;
-    // padrão: gastar o sugerido; o que não gastar vai para a reserva
-    const livre = Math.max(0, sug - ja);
-    const vars = VARS.map(([n, w]) => ({ n, v: cent(livre * w) }));
-    const dif = cent(livre - vars.reduce((s, o) => s + o.v, 0)); vars[3].v = cent(vars[3].v + dif);
-    if (ja) vars.unshift({ n: "Já gasto no Inter neste mês", v: Math.round(ja * 100) / 100 });
-    return { F, renda: Math.round(renda * 100) / 100, ob: ob.map(([n, v]) => ({ n, min: Math.round(v * 100) / 100, v: Math.round(v * 100) / 100 })), vars, meta: metaT, meta15: p.meta || 0, shares: cent(shares), sugerido: sug, vr: p.vr || pr.vr[i] || 0 };
+  // ---------- simulação: novas compras e dívidas ----------
+  const TIPOS = { parc: "Compra parcelada no cartão", vista: "Compra à vista no cartão", div: "Nova dívida (boleto, empréstimo, financiamento)" };
+  let SIM = null, SIM_DEF = null;
+  const cent = (x) => Math.round(x * 100) / 100;
+  function simLoad() {
+    let s = null; try { s = JSON.parse(localStorage.getItem("sim-v2")); } catch (_) {}
+    if (!s || !Array.isArray(s.itens)) s = { itens: [], modo: "orc" };
+    s.itens.forEach((it) => { if (!DATA.meses.includes(it.mes)) it.mes = SIM_DEF; if (it.cartao && !DATA.cartoes.includes(it.cartao)) it.cartao = DATA.cartoes[0]; });
+    return s;
   }
-  function simLoad(k) { let s = null; try { s = JSON.parse(localStorage.getItem("sim-" + k)); } catch (_) {} const b = simBase(k);
-    if (s && s.ob && s.ob.length === b.ob.length && s.vars && s.vars.length === b.vars.length && s.meta != null) { s.ob.forEach((o, n) => (o.min = b.ob[n].min, o.v = Math.max(o.v, b.ob[n].min))); s.vr = b.vr; s.F = b.F; s.meta = b.meta; s.meta15 = b.meta15; s.shares = b.shares; s.sugerido = b.sugerido; return s; } return b; }
-  const simSave = (k) => { try { localStorage.setItem("sim-" + k, JSON.stringify(SIM)); } catch (_) {} };
-  function slider(id, label, val, min, max, hint) {
-    return `<div class="sl"><label for="${id}n">${esc(label)}</label><input type="range" id="${id}r" min="${min}" max="${max}" step="1" value="${val}"><input type="number" id="${id}n" min="${min}" step="0.01" value="${val}">${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
+  const simSave = () => { try { localStorage.setItem("sim-v2", JSON.stringify(SIM)); } catch (_) {} };
+  function novoItem(t) {
+    const base = { id: Date.now() + "" + Math.random().toString(36).slice(2, 6), t, desc: "", valor: 0, pct: 0 };
+    if (t === "parc") return Object.assign(base, { n: 3, cartao: DATA.cartoes[0], mes: SIM_DEF });
+    if (t === "vista") return Object.assign(base, { n: 1, cartao: DATA.cartoes[0], mes: SIM_DEF });
+    return Object.assign(base, { n: 12, mes: DATA.meses.includes(addM(SIM_DEF, 1)) ? addM(SIM_DEF, 1) : SIM_DEF });
   }
-  function renderSim(soResultado) {
-    const k = $("sMes").value;
-    if (!SIM || SIM.k !== k) { SIM = simLoad(k); SIM.k = k; soResultado = false; }
-    const minMes = DATA.minMes || 0, meta = SIM.meta || 0;
-    if (!soResultado) {
-      $("sRenda").value = SIM.renda;
-      $("sOb").innerHTML = SIM.ob.map((o, n) => slider("ob" + n, o.n + " (mínimo " + R(o.min) + ")", o.v, Math.floor(o.min), Math.ceil(Math.max(o.min * 2, o.min + 300)))).join("") || '<p class="muted">Nenhum obrigatório neste mês.</p>';
-      $("sVar").innerHTML = SIM.vars.map((o, n) => slider("va" + n, o.n, o.v, 0, Math.ceil(Math.max(2000, SIM.renda)), o.n.startsWith("Mercado") ? "O Flash (VR) do mês (" + R(SIM.vr) + ") paga o supermercado; aqui entra só o que passar dele." : "")).join("") ;
-      const bind = (pref, arr, isOb) => arr.forEach((o, n) => { const r = $(pref + n + "r"), x = $(pref + n + "n");
-        const set = (v) => { v = +v || 0; if (isOb) v = Math.max(o.min, v); o.v = v; r.value = v; x.value = v; simSave(k); renderSim(true); };
-        r.addEventListener("input", () => set(r.value)); x.addEventListener("change", () => set(x.value)); });
-      bind("ob", SIM.ob, true); bind("va", SIM.vars, false);
-    }
-    const ob = SIM.ob.reduce((s, o) => s + o.v, 0), va = SIM.vars.reduce((s, o) => s + o.v, 0), ent = SIM.renda;
-    const livre = ent - ob, res = livre - va, sobra = res;
-    $("sObTot").textContent = R(ob); $("sVarTot").textContent = R(va) + " em gastos · livre " + R(livre);
-    $("sVarNota").textContent = `Começa no sugerido (${R(SIM.sugerido)} = livre − meta de ${R(meta)}${SIM.shares ? ": " + P(DATA.pct) + " do líquido " + R(SIM.meta15) + " + parte do 13º/férias " + R(SIM.shares) : ", " + P(DATA.pct) + " do salário líquido"}). Não é obrigação: o que você não gastar vai para a reserva. Mínimo prioritário: ${R(minMes)}/mês.`;
-    $("sNota").textContent = `Compras de ${lab(k)} são pagas com o salário de ${lab(SIM.F)} (5º dia útil). Por isso a entrada e os obrigatórios são os de ${lab(SIM.F)}: salário, contas fixas e faturas daquele mês, já descontados os reembolsos.`;
-    $("sKpis").innerHTML = [["Entrada do mês", R(ent), ""], ["Obrigatórios", R(ob), P(ent ? ob / ent : 0) + " comprometido"], ["Livre no mês", R(livre), "sugerido gastar " + R(SIM.sugerido)],
-      ["Gastos do mês", R(va), P(livre > 0 ? va / livre : 0) + " do livre"], [res >= 0 ? "Vai para a reserva" : "Déficit", R(res), res < 0 ? "falta dinheiro" : P(meta ? res / meta : 0) + " da meta de " + R0(meta), res < 0 ? "neg" : res >= meta - 0.01 ? "pos" : ""]]
-      .map(([l, v, s, c]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${c || ""}">${v}</div><div class="s">${s}</div></div>`).join("");
-    const cor = pal(), tot = Math.max(ent, ob + va) || 1;
-    const parts = [["Obrigatórios", ob, cor[0]], ["Gastos do mês", va, cor[1]], ["Vai para a reserva", Math.max(0, res), cor[2]]];
-    $("sStack").innerHTML = parts.map(([n, v, c]) => (v > 0 ? `<span title="${n}: ${R(v)}" style="width:${(v / tot) * 100}%;background:${c}"></span>` : "")).join("");
-    $("sLegend").innerHTML = parts.map(([n, v, c]) => `<span><i style="background:${c}"></i>${n}: ${R(v)} (${P(ent ? v / ent : 0)})</span>`).join("");
+  // cobranças do item por mês de pagamento (salário que paga)
+  function cobrancas(it) {
+    const n = it.t === "vista" ? 1 : Math.max(1, Math.round(+it.n || 1)), out = [];
+    const parcela = it.t === "div" ? +it.valor || 0 : (+it.valor || 0) / n;
+    const meu = parcela * (1 - Math.min(100, Math.max(0, +it.pct || 0)) / 100);
+    for (let i = 0; i < n; i++) out.push({ pag: it.t === "div" ? addM(it.mes, i) : addM(it.mes, i + 1), valor: parcela, meu });
+    return { n, parcela, meu, lista: out };
+  }
+  function simCalc() {
+    const minMes = DATA.minMes || 0, porPag = {};
+    SIM.itens.forEach((it) => cobrancas(it).lista.forEach((c) => (porPag[c.pag] = (porPag[c.pag] || 0) + c.meu)));
+    const meses = DATA.meses.filter((k) => DATA.plano[k] && k >= DATA.planIni);
+    let acc = 0;
+    const linhas = meses.map((k) => {
+      const p = DATA.plano[k], F = addM(k, 1), j = idx(F), pr = DATA.proj;
+      const nova = cent(porPag[F] || 0);
+      const shares = (p.reserva || 0) - ((p.espaco || 0) - (p.teto || 0));
+      let tetoD, resD;
+      if (SIM.modo === "res") { tetoD = p.teto || 0; resD = (p.reserva || 0) - nova; }
+      else { const espD = (p.espaco || 0) - nova; tetoD = p.teto > 0 ? Math.max(minMes, espD - (p.meta || 0)) : 0; resD = espD - tetoD + shares; }
+      acc += resD - (p.reserva || 0);
+      const ent = j >= 0 ? pr.entradas[j] : 0;
+      const obrig = j >= 0 ? Math.abs(pr.fixos[j]) + Math.abs(pr.parcelas[j]) + Math.abs(pr.variaveis[j]) - pr.reemb[j] : 0;
+      return { k, F, nova, ent, obrig, compA: ent ? obrig / ent : null, compD: ent ? (obrig + nova) / ent : null,
+        sobraA: j >= 0 ? pr.sobra[j] : null, sobraD: j >= 0 ? pr.sobra[j] - nova : null,
+        tetoA: p.teto || 0, tetoD: cent(tetoD), resA: p.reserva || 0, resD: cent(resD), accA: p.reservaAc || 0, accD: cent((p.reservaAc || 0) + acc), meta: p.meta || 0, p };
+    });
+    return { linhas, porPag };
+  }
+  function renderSimEditor() {
+    const mesOpts = (sel) => DATA.meses.filter((k) => k >= DATA.planIni || k === sel).map((k) => `<option value="${k}" ${k === sel ? "selected" : ""}>${lab(k)}</option>`).join("");
+    const carOpts = (sel) => DATA.cartoes.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
+    $("sItens").innerHTML = SIM.itens.length ? SIM.itens.map((it, n) => `
+      <div class="simit" data-i="${n}">
+        <div class="simit-h"><b>${n + 1}. ${TIPOS[it.t]}</b><button type="button" class="btn ghost sm" data-rm="${n}" aria-label="Remover">Remover</button></div>
+        <div class="simit-g">
+          <div class="f wide"><label>Descrição</label><input data-k="desc" type="text" value="${esc(it.desc)}" placeholder="${it.t === "div" ? "ex.: empréstimo, financiamento" : "ex.: tênis, passagem"}"></div>
+          <div class="f"><label>${it.t === "div" ? "Valor da parcela (R$)" : "Valor total da compra (R$)"}</label><input data-k="valor" type="number" inputmode="decimal" step="0.01" min="0" value="${it.valor || ""}"></div>
+          ${it.t === "vista" ? "" : `<div class="f"><label>Nº de parcelas</label><input data-k="n" type="number" inputmode="numeric" step="1" min="1" max="60" value="${it.n}"></div>`}
+          ${it.t === "div" ? "" : `<div class="f"><label>Cartão</label><select data-k="cartao">${carOpts(it.cartao)}</select></div>`}
+          <div class="f"><label>${it.t === "div" ? "1ª parcela paga em" : "Mês da compra"}</label><select data-k="mes">${mesOpts(it.mes)}</select></div>
+          <div class="f"><label>Outra pessoa me paga (%)</label><input data-k="pct" type="number" inputmode="numeric" step="1" min="0" max="100" value="${it.pct || ""}" placeholder="0"></div>
+        </div>
+        <p class="muted small" id="sInfo${n}"></p>
+      </div>`).join("") : `<p class="muted">Nenhuma simulação ainda. Escolha abaixo o que você quer testar.</p>`;
+    $("sModo").value = SIM.modo;
+    $("sItens").querySelectorAll(".simit").forEach((box) => {
+      const it = SIM.itens[+box.dataset.i];
+      box.querySelectorAll("[data-k]").forEach((el) => el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => {
+        const k = el.dataset.k; it[k] = k === "desc" || k === "cartao" || k === "mes" ? el.value : +el.value || 0; simSave(); renderSimResultado(); }));
+      box.querySelector("[data-rm]").addEventListener("click", () => { SIM.itens.splice(+box.dataset.i, 1); simSave(); renderSimEditor(); renderSimResultado(); });
+    });
+  }
+  const ab = (a, b, f = R0) => (Math.abs(a - b) < 0.005 ? f(b) : `<span class="muted">${f(a)}</span> → <b>${f(b)}</b>`);
+  function renderSimResultado() {
+    const cor = pal(), minMes = DATA.minMes || 0, card0 = DATA.cartoes[0] || "Inter";
+    // informações por item + regras
     const av = [];
-    if (res < 0) av.push(`<span class="icon-bad">Faltam ${R(-res)}: os gastos passam do livre do mês.</span>`);
-    else if (res < meta - 0.01) av.push(`<span class="icon-warn">A reserva fica em ${R(res)}, abaixo da meta de ${R(meta)} (${P(DATA.pct)} do salário líquido).</span>`);
-    if (va < minMes) av.push(`<span class="icon-warn">Gastos abaixo do mínimo prioritário de ${R(minMes)}.</span>`);
-    if (!av.length) av.push(`<span class="icon-ok">Cabe tudo: ${R(res)} vão para a reserva (meta de ${R(meta)} batida).</span>`);
+    SIM.itens.forEach((it, n) => {
+      const c = cobrancas(it), nome = it.desc ? "“" + esc(it.desc) + "”" : "Item " + (n + 1), el = $("sInfo" + n);
+      if (!it.valor) { if (el) el.textContent = "Preencha o valor."; return; }
+      const ini = c.lista[0].pag, fim = c.lista[c.lista.length - 1].pag;
+      if (el) el.innerHTML = (it.t === "div" ? `${c.n}x de ${R(c.parcela)} (total ${R(c.parcela * c.n)})` : c.n > 1 ? `${c.n}x de ${R(c.parcela)} no ${esc(it.cartao)}` : `${R(c.parcela)} à vista no ${esc(it.cartao)}`) +
+        ` · pago com o salário de ${lab(ini)}${c.n > 1 ? " até " + lab(fim) : ""}` + (it.pct ? ` · meu custo ${R(c.meu)}/mês (${esc(it.pct)}% volta pra mim)` : "");
+      const p = DATA.plano[it.mes] || {};
+      if (it.t !== "div" && it.cartao !== card0) av.push(`<span class="icon-warn">${nome}: a combinação era parar de usar ${esc(it.cartao)} e concentrar no ${esc(card0)}.</span>`);
+      if (it.t === "parc" && p.parc != null) {
+        if (p.parc && c.parcela > p.parc + 0.005) av.push(`<span class="icon-warn">${nome}: parcela de ${R(c.parcela)} passa do limite de parcelas novas de ${lab(it.mes)} (${R(p.parc)}/mês).</span>`);
+        if (p.vezes && c.n > p.vezes) av.push(`<span class="icon-warn">${nome}: ${c.n}x passa da regra de até ${p.vezes}x em ${lab(it.mes)}.</span>`);
+      }
+      if (it.t === "vista" && p.vista != null && c.parcela > (p.teto || 0) + 0.005) av.push(`<span class="icon-warn">${nome}: ${R(c.parcela)} à vista é mais do que o orçamento sugerido de ${lab(it.mes)} (${R(p.teto)}).</span>`);
+      if (fim > DATA.meses[DATA.meses.length - 1]) av.push(`<span class="icon-warn">${nome}: as últimas parcelas passam de ${lab(DATA.meses[DATA.meses.length - 1])}, fim da projeção da planilha.</span>`);
+    });
+    const temValor = SIM.itens.some((it) => +it.valor > 0);
+    $("sRes").hidden = !temValor;
+    if (!temValor) return;
+    const { linhas } = simCalc();
+    const afet = linhas.filter((l) => l.nova > 0), primeiro = afet.length ? afet[0].k : linhas[0].k;
+    const vis = linhas.filter((l) => l.k >= primeiro);
+    const ult = linhas[linhas.length - 1];
+    const totMeu = SIM.itens.reduce((s, it) => { const c = cobrancas(it); return s + c.meu * c.n; }, 0);
+    const totCheio = SIM.itens.reduce((s, it) => { const c = cobrancas(it); return s + c.parcela * c.n; }, 0);
+    const maxN = afet.reduce((a, l) => (l.nova > a.nova ? l : a), { nova: 0 });
+    const maxC = afet.reduce((a, l) => (l.compD != null && l.compD > (a.compD || 0) ? l : a), { compD: 0 });
+    const cortOrc = vis.reduce((s, l) => s + (l.tetoA - l.tetoD), 0), difRes = ult.accD - ult.accA;
+    $("sKpis").innerHTML = [
+      ["Custo total para mim", R(totMeu), totCheio - totMeu > 0.005 ? "valor cheio " + R(totCheio) : afet.length + " mês(es) com cobrança"],
+      ["Maior cobrança no mês", R(maxN.nova), maxN.k ? "compras de " + lab(maxN.k) + " (salário de " + lab(maxN.F) + ")" : ""],
+      ["Orçamento de gastos", "−" + R(cortOrc), SIM.modo === "res" ? "orçamento mantido" : "a menos para gastar no período"],
+      ["Reserva em " + lab(ult.k), R(ult.accD), (difRes < 0 ? "−" : "+") + R(Math.abs(difRes)) + " vs. sem a simulação", ult.accD < 0 ? "neg" : difRes < -0.005 ? "" : "pos"],
+      ["Entrada comprometida", maxC.k ? P(maxC.compD) : "—", maxC.k ? "no pior mês (" + lab(maxC.F) + "), antes " + P(maxC.compA) : ""],
+    ].map(([l, v, s, c]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${c || ""}">${v}</div><div class="s">${s}</div></div>`).join("");
+    // avisos do planejamento
+    const neg = vis.filter((l) => l.resD < -0.005), noMin = vis.filter((l) => l.nova > 0 && SIM.modo === "orc" && l.tetoD <= minMes + 0.005 && l.resD < l.resA - 0.005);
+    const abaixoMeta = vis.filter((l) => l.nova > 0 && l.resD >= -0.005 && l.resD < l.meta - 0.01 && l.resA >= l.meta - 0.01);
+    const resNeg = vis.find((l) => l.accD < -0.005);
+    if (neg.length) av.unshift(`<span class="icon-bad">Em ${neg.length} mês(es) a conta não fecha (${neg.map((l) => lab(l.k) + " " + R0(l.resD)).join(", ")}): a diferença teria que sair da reserva.</span>`);
+    if (resNeg) av.unshift(`<span class="icon-bad">A reserva ficaria negativa a partir de ${lab(resNeg.k)} (${R(resNeg.accD)}).</span>`);
+    if (noMin.length) av.push(`<span class="icon-warn">Em ${noMin.map((l) => lab(l.k)).join(", ")} o orçamento já fica no mínimo de ${R0(minMes)}/mês, então a parcela passa a sair da reserva.</span>`);
+    if (abaixoMeta.length) av.push(`<span class="icon-warn">A reserva do mês fica abaixo da meta de ${P(DATA.pct)} em ${abaixoMeta.map((l) => lab(l.k)).join(", ")}.</span>`);
+    if (!av.length) av.push(`<span class="icon-ok">Cabe no planejamento: ${SIM.modo === "res" ? "o orçamento continua o mesmo e a reserva absorve a parcela" : "a parcela sai do orçamento de gastos e a meta da reserva continua batida"}.</span>`);
+    av.push(`<span class="muted small">Se decidir fazer, lance na aba Lançamentos da planilha para entrar no planejamento de verdade.</span>`);
     $("sAviso").innerHTML = av.join("<br>");
+    // gráficos
+    const L = vis.map((l) => lab(l.k));
+    const ultAf = afet.length ? afet[afet.length - 1].k : primeiro, vl = vis.filter((l) => l.k <= addM(ultAf, 2)), bad = css("--bad");
+    const cl = draw("cSimLivre", "bar", vl.map((l) => lab(l.k)), [ds("Nova parcela", vl.map((l) => l.nova), cor[1]), ds("Para gastar", vl.map((l) => l.tetoD), cor[0]),
+      ds("Vai para a reserva", vl.map((l) => Math.max(0, l.resD)), cor[2])].concat(vl.some((l) => l.resD < -0.005) ? [ds("Falta (sai da reserva)", vl.map((l) => Math.min(0, l.resD)), bad)] : []), baseOpts(true, (v) => R0(v)));
+    if (vl.length > 8) { cl.options.plugins.datalabels.display = (c) => c.datasetIndex === 0 && !!c.raw && (c.dataIndex === 0 || vl[c.dataIndex].nova !== vl[c.dataIndex - 1].nova); cl.update(); }
+    draw("cSimRes", "line", L, [
+      ds("Sem a simulação", vis.map((l) => l.accA), css("--muted"), { fill: false, tension: 0.2, borderWidth: 2, borderDash: [6, 4], pointRadius: 0, datalabels: { display: false } }),
+      ds("Com a simulação", vis.map((l) => l.accD), cor[0], { fill: false, tension: 0.2, borderWidth: 2, pointRadius: 3, pointBackgroundColor: cor[0] })],
+      baseOpts(false, (v) => R0(v), {}));
+    const cr = charts.cSimRes; cr.options.plugins.datalabels.display = (c) => c.datasetIndex === 1 && (c.dataIndex === vis.length - 1 || c.dataIndex % 3 === 0); cr.update();
+    // tabela
+    $("tSim").innerHTML = `<tr><th>Mês das compras</th><th>Nova parcela</th><th>Entrada comprometida</th><th>Orçamento para gastar</th><th>Vai para a reserva</th><th>Reserva acumulada</th><th>Sobra do salário seguinte</th></tr>` +
+      vis.map((l) => `<tr class="${l.nova > 0 ? "" : "fora"}"><td>${lab(l.k)}<div class="muted small">salário de ${lab(l.F)}</div></td><td>${l.nova ? R(l.nova) : "—"}</td><td>${l.compA == null ? "—" : ab(l.compA, l.compD, P)}</td>
+        <td>${ab(l.tetoA, l.tetoD)}</td><td class="${l.resD < 0 ? "neg" : ""}">${ab(l.resA, l.resD)}</td><td class="${l.accD < 0 ? "neg" : ""}">${ab(l.accA, l.accD)}</td><td class="${l.sobraD != null && l.sobraD < 0 ? "neg" : ""}">${l.sobraA == null ? "—" : ab(l.sobraA, l.sobraD)}</td></tr>`).join("");
   }
-  $("sMes").addEventListener("change", () => { SIM = null; renderSim(); });
-  $("sRenda").addEventListener("change", (e) => { SIM.renda = +e.target.value || 0; simSave(SIM.k); renderSim(true); });
-  $("sReset").addEventListener("click", () => { try { localStorage.removeItem("sim-" + $("sMes").value); } catch (_) {} SIM = null; renderSim(); });
+  function renderSim() { if (!SIM) SIM = simLoad(); renderSimEditor(); renderSimResultado(); }
+  document.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => { SIM.itens.push(novoItem(b.dataset.add)); simSave(); renderSimEditor(); renderSimResultado(); }));
+  $("sModo").addEventListener("change", (e) => { SIM.modo = e.target.value; simSave(); renderSimResultado(); });
+  $("sLimpar").addEventListener("click", () => { SIM.itens = []; simSave(); renderSimEditor(); renderSimResultado(); });
 
   load();
 })();
