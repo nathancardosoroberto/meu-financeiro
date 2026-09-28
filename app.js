@@ -409,7 +409,7 @@
       .filter(([, v]) => v).map(([t, v]) => `<tr><td>${t}</td><td>${R(v)}</td><td>${pc(v)}</td></tr>`).join("");
     const sai = [["Contas fixas", pr.fixos[i]], ["Parcelas", pr.parcelas[i]], ["Outras cobranças e compras", pr.variaveis[i]]].map(([t, v]) => `<tr><td>${t}</td><td class="neg">${R(v)}</td><td>${pc(-v)}</td></tr>`).join("");
     const fat = Object.entries(DATA.faturas).filter(([c]) => passaForma(c)).map(([c, v]) => `<tr><td>Fatura ${esc(c)}</td><td>${R(v[i])}</td><td>${pc(v[i])}</td></tr>`).join("");
-    $("tEstimativa").innerHTML = `<tr><th>${lab(k)} ${real ? '<span class="tag">realizado</span>' : '<span class="tag prev">previsto</span>'}</th><th>Valor</th><th>% das entradas</th></tr>` + lin +
+    $("tEstimativa").innerHTML = `<tr><th>${lab(k)} ${real ? '<span class="tag">realizado</span>' : '<span class="tag prev">previsto</span>'}</th><th>Valor</th><th class="pc">% das<br>entradas</th></tr>` + lin +
       `<tr class="total"><td>Entradas</td><td>${R(ent)}</td><td>${ent ? "100%" : "—"}</td></tr>` + sai +
       `<tr class="total"><td>Sobra do mês</td><td class="${pr.sobra[i] < 0 ? "neg" : "pos"}">${R(pr.sobra[i])}</td><td>${pc(pr.sobra[i])}</td></tr>` +
       (fat ? `<tr><td colspan="3" class="muted small" style="text-align:left">Faturas (já dentro das saídas)</td></tr>` + fat : "");
