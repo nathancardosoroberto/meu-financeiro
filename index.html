@@ -91,10 +91,25 @@
 </main>
 <footer class="muted small">Os dados vêm da planilha. Estimativas de 13º e férias seguem o que estiver na aba "13º e Férias".</footer>
 
-<script src="vendor/xlsx.full.min.js"></script>
-<script src="vendor/chart.umd.min.js"></script>
-<script src="vendor/chartjs-plugin-datalabels.min.js"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script>
+/* Carrega as bibliotecas da pasta vendor/ ou, se não existir, da raiz do repositório */
+(function () {
+  var libs = ["xlsx.full.min.js", "chart.umd.min.js", "chartjs-plugin-datalabels.min.js", "config.js", "app.js"];
+  function load(i) {
+    if (i >= libs.length) return;
+    var name = libs[i], tries = /^(config|app)\.js$/.test(name) ? [name] : ["vendor/" + name, name];
+    (function attempt(k) {
+      var s = document.createElement("script"); s.src = tries[k];
+      s.onload = function () { load(i + 1); };
+      s.onerror = function () {
+        if (k + 1 < tries.length) attempt(k + 1);
+        else document.getElementById("status").textContent = "Erro: não encontrei o arquivo " + name + " no repositório.";
+      };
+      document.body.appendChild(s);
+    })(0);
+  }
+  load(0);
+})();
+</script>
 </body>
 </html>
