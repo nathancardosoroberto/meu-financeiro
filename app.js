@@ -200,7 +200,9 @@
   // filtros recolhíveis (fechados por padrão no celular)
   const isMobile = () => window.matchMedia("(max-width: 700px)").matches;
   let fAberto = null; try { fAberto = localStorage.getItem("dash-filtros-aberto"); } catch (_) {}
-  function setFiltros(open) { $("filtros").classList.toggle("collapsed", !open); $("fToggle").setAttribute("aria-expanded", open); $("fToggle").textContent = open ? "Fechar filtros ▴" : "Filtros ▾"; }
+  function setFiltros(open) { $("filtros").classList.toggle("collapsed", !open);
+    document.querySelectorAll("#filtros .f:not(.keep)").forEach((el) => (el.style.display = open ? "" : "none"));
+    if (isMobile()) $("filtros").style.position = open ? "static" : ""; $("fToggle").setAttribute("aria-expanded", open); $("fToggle").textContent = open ? "Fechar filtros ▴" : "Filtros ▾"; }
   setFiltros(fAberto != null ? fAberto === "1" : !isMobile());
   $("fToggle").addEventListener("click", () => { const open = $("filtros").classList.contains("collapsed"); setFiltros(open); try { localStorage.setItem("dash-filtros-aberto", open ? "1" : "0"); } catch (_) {} });
   function resumoFiltros() {
