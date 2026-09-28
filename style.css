@@ -1,0 +1,59 @@
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#1b1d21; --ink2:#4a4f57; --muted:#6b717b; --line:#e3e6ea;
+  --accent:#2a78d6; --good:#0ca30c; --warn:#b77800; --bad:#d03b3b; --barbg:#e9edf2;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121212; --surface:#1a1a19; --ink:#f1f1ef; --ink2:#c9c9c5; --muted:#9a9a95; --line:#2e2e2c;
+    --accent:#3987e5; --barbg:#2a2a28; --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121212; --surface:#1a1a19; --ink:#f1f1ef; --ink2:#c9c9c5; --muted:#9a9a95; --line:#2e2e2c;
+  --accent:#3987e5; --barbg:#2a2a28; --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:20px 24px 8px}
+h1{margin:0;font-size:24px}
+h2{margin:0 0 8px;font-size:16px}
+.muted{color:var(--muted)} .small{font-size:12.5px;margin:2px 0 8px}
+.btn{display:inline-block;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:14px}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.filters{position:sticky;top:0;z-index:5;display:flex;gap:12px;flex-wrap:wrap;padding:12px 24px;background:var(--bg);border-bottom:1px solid var(--line)}
+.f{display:flex;flex-direction:column;gap:3px;min-width:130px}
+.f label{font-size:12px;color:var(--muted)}
+select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+main{padding:16px 24px;display:flex;flex-direction:column;gap:16px;max-width:1400px;margin:0 auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;min-width:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}.top,.filters,main{padding-left:16px;padding-right:16px}}
+.hero{display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:center}
+@media (max-width:700px){.hero{grid-template-columns:1fr}}
+.eyebrow{margin:0;color:var(--ink2);font-weight:600}
+.big{font-size:44px;font-weight:750;margin:4px 0 8px;letter-spacing:-.5px}
+.big.neg{color:var(--bad)}
+.bar{height:12px;background:var(--barbg);border-radius:6px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent);border-radius:6px;transition:width .3s}
+.bar span.over{background:var(--bad)}
+.hero-side{display:flex;flex-direction:column;gap:6px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:12.5px;color:var(--muted)} .kpi .v{font-size:22px;font-weight:700;margin-top:2px}
+.kpi .s{font-size:12px;color:var(--ink2)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;border:1px solid var(--line);color:var(--ink2);margin-left:6px;vertical-align:middle}
+.tag.prev{border-style:dashed}
+.chart{position:relative;height:320px} .chart.tall{height:380px}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left;white-space:normal}
+.tbl th{font-size:12px;color:var(--muted);font-weight:600}
+.tbl tr.total td{font-weight:700;border-top:2px solid var(--line)}
+.tbl td.neg{color:var(--bad)} .tbl td.pos{color:var(--good)}
+.tblwrap{overflow-x:auto;margin-top:12px}
+.row-between{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.meter{margin:10px 0}
+.meter .t{display:flex;justify-content:space-between;font-size:13px;color:var(--ink2)}
+footer{padding:16px 24px 32px;text-align:center}
+.icon-ok::before{content:"✓ ";color:var(--good)} .icon-warn::before{content:"! ";color:var(--warn);font-weight:800}
