@@ -793,5 +793,27 @@
   $("sModo").addEventListener("change", (e) => { SIM.modo = e.target.value; simSave(); renderSimResultado(); });
   $("sLimpar").addEventListener("click", () => { SIM.itens = []; simSave(); renderSimEditor(); renderSimResultado(); });
 
-  load();
+  // ---------- senha de acesso (proteção simples, só na tela) ----------
+  async function hashSenha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("meu-financeiro:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
+  function portao() {
+    const H = (CFG.PASS_HASH || "").trim().toLowerCase(); let lembrado = null; try { lembrado = localStorage.getItem("dash-acesso"); } catch (_) {}
+    if (H && lembrado === H) { document.body.classList.remove("travado"); load(); return; }
+    const ov = document.createElement("div"); ov.className = "lock"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
+    ov.innerHTML = H ? `<form class="lock-box" id="lkF"><div class="logo-lk" aria-hidden="true">🔒</div><h2>Meu Financeiro</h2><p class="muted small">Digite a senha para ver o dashboard.</p>
+        <input type="password" id="lkS" autocomplete="current-password" placeholder="Senha" required><label class="lk-rem"><input type="checkbox" id="lkR" checked> Lembrar neste aparelho</label>
+        <button class="btn" type="submit">Entrar</button><p class="lk-err" id="lkE" role="alert"></p></form>`
+      : `<form class="lock-box" id="lkF"><div class="logo-lk" aria-hidden="true">🔑</div><h2>Criar senha</h2><p class="muted small">Ainda não há senha. Digite a senha que você quer usar e copie a linha gerada para o arquivo config.js no GitHub.</p>
+        <input type="password" id="lkS" autocomplete="new-password" placeholder="Nova senha" required minlength="4"><button class="btn" type="submit">Gerar</button>
+        <textarea id="lkO" readonly rows="3" hidden></textarea><p class="muted small" id="lkI" hidden>Cole essa linha dentro de config.js (no lugar de PASS_HASH: "") e salve. A senha em si não fica salva em lugar nenhum.</p></form>`;
+    document.body.appendChild(ov); document.body.classList.add("travado"); setTimeout(() => $("lkS").focus(), 50);
+    $("lkF").addEventListener("submit", async (e) => { e.preventDefault(); const v = $("lkS").value; if (!v) return;
+      if (!window.crypto || !crypto.subtle) { (H ? $("lkE") : $("lkI")).textContent = "Abra pelo endereço https do GitHub Pages."; return; }
+      const h = await hashSenha(v);
+      if (!H) { $("lkO").hidden = false; $("lkI").hidden = false; $("lkO").value = 'PASS_HASH: "' + h + '",'; $("lkO").select(); return; }
+      if (h === H) { try { $("lkR").checked ? localStorage.setItem("dash-acesso", h) : localStorage.removeItem("dash-acesso"); } catch (_) {} ov.remove(); document.body.classList.remove("travado"); load(); }
+      else { $("lkE").textContent = "Senha incorreta."; $("lkS").value = ""; $("lkS").focus(); } });
+  }
+  $("sair").addEventListener("click", () => { try { localStorage.removeItem("dash-acesso"); localStorage.removeItem("dash-data"); } catch (_) {} location.reload(); });
+  if (!(CFG.PASS_HASH || "").trim()) $("sair").hidden = true;
+  portao();
 })();

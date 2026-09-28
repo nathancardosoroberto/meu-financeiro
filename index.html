@@ -6,9 +6,9 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
-<body>
+<body class="travado">
 <header class="top">
   <svg class="top-deco" viewBox="0 0 600 140" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
     <g fill="currentColor">
@@ -40,6 +40,7 @@
     </select>
     <a class="btn ghost" id="abrir" target="_blank" rel="noopener" hidden>Abrir planilha</a>
     <button class="btn" id="reload">Atualizar do Google</button>
+    <button class="btn ghost" id="sair" title="Bloquear e pedir a senha de novo">Sair 🔒</button>
   </div>
 </header>
 

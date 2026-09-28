@@ -153,3 +153,16 @@ footer{padding:16px 24px 32px;text-align:center}
 .meta-it .bar{margin:8px 0}
 .meta-l{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:13.5px;color:var(--ink2)}
 .tag.bad{color:var(--bad);border-color:var(--bad)} .tag.good{color:var(--good);border-color:var(--good)}
+
+/* tela de senha */
+body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body.travado>footer{visibility:hidden}
+.lock{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 22%,var(--bg)),color-mix(in srgb,var(--s3) 18%,var(--bg)))}
+.lock-box{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px 22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);text-align:center}
+.lock-box h2{margin:0;font-size:20px}
+.lock-box input[type=password]{font-size:17px;padding:11px 12px;text-align:center}
+.lock-box .btn{padding:11px;font-size:15px}
+.lock-box textarea{font:12px/1.4 ui-monospace,Menlo,monospace;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;resize:none;word-break:break-all}
+.logo-lk{font-size:34px}
+.lk-rem{font-size:13px;color:var(--ink2);display:flex;gap:6px;align-items:center;justify-content:center}
+.lk-err{color:var(--bad);font-size:13px;margin:0;min-height:1em}
