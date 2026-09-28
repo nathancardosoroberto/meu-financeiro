@@ -304,9 +304,19 @@
   const ds = (label, data, color, extra = {}) => Object.assign({ label, data, backgroundColor: color, borderColor: color, borderWidth: 0, borderRadius: 4, borderSkipped: "start", maxBarThickness: 46 }, extra);
 
   // ---------- render ----------
-  function renderAll() { if (!DATA) return; resumoFiltros(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
+  function renderAll() { if (!DATA) return; resumoFiltros(); renderTopo(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
     if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else renderSim(); }
 
+  function renderTopo() {
+    const ms = DATA.meses.filter((k) => DATA.plano[k]); if (ms.length < 2) return;
+    const v = ms.map((k) => DATA.plano[k].reservaAc || 0), W = 160, H = 40, mn = Math.min(0, ...v), mx = Math.max(...v) || 1;
+    const pts = v.map((y, n) => [(n / (v.length - 1)) * W, H - 3 - ((y - mn) / (mx - mn || 1)) * (H - 6)]);
+    const d = pts.map((p, n) => (n ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    const iRef = ms.indexOf(REF && ms.includes(REF.mes) ? REF.mes : ms[0]), pr = pts[Math.max(0, iRef)];
+    $("topSpark").innerHTML = `<div><div class="l">Reserva prevista</div><div class="v">${R0(v[v.length - 1])}</div><div class="l">em ${lab(ms[ms.length - 1])}</div></div>
+      <svg viewBox="-3 -3 ${W + 6} ${H + 6}" width="${W}" height="${H}" aria-hidden="true"><path d="${d} L${W} ${H} L0 ${H} Z" fill="currentColor" opacity=".12"/><path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="${pr[0]}" cy="${pr[1]}" r="3.2" fill="currentColor"/></svg>`;
+    $("topSpark").hidden = false;
+  }
   function renderHoje() {
     const hoje = new Date(); const prox = addM(REF.mes, 1); const pp = DATA.plano[prox] || {};
     const dias = Math.max(0, Math.ceil((REF.proximo - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 12)) / 864e5));

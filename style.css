@@ -128,3 +128,16 @@ footer{padding:16px 24px 32px;text-align:center}
 .tbl tr.fora td{color:var(--muted)}
 @media (max-width:700px){.sim-add .btn{flex:1 1 100%}.simit-g .f{flex:1 1 45%}.simit-g .f.wide{flex-basis:100%}}
 @media (max-width:700px){#sKpis{grid-template-columns:1fr 1fr}#sKpis .kpi .v{font-size:18px}.sim-add .btn{flex:1 1 45%}}
+
+/* cabeçalho */
+.top{position:relative;overflow:hidden;padding:20px 24px 18px;background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 14%,var(--bg)) 0%,color-mix(in srgb,var(--s3) 10%,var(--bg)) 100%);border-bottom:1px solid var(--line)}
+.top>*{position:relative;z-index:1}
+.top .top-deco{position:absolute;z-index:0;right:0;bottom:0;height:100%;width:min(600px,70%);color:var(--accent);opacity:.16;pointer-events:none}
+.brand{display:flex;align-items:center;gap:12px}
+.logo svg{width:46px;height:46px;display:block;filter:drop-shadow(0 3px 8px color-mix(in srgb,var(--accent) 35%,transparent))}
+.brand h1{letter-spacing:-.3px}
+.brand .small{margin:2px 0 0}
+.top-spark{display:flex;align-items:center;gap:12px;color:var(--s3);background:color-mix(in srgb,var(--surface) 80%,transparent);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-left:auto}
+.top-spark .l{font-size:11.5px;color:var(--muted)} .top-spark .v{font-size:17px;font-weight:750;color:var(--ink)}
+.tabs{background:var(--bg)}
+@media (max-width:700px){.top{padding:16px}.top-spark{margin-left:0;flex:1 1 100%;justify-content:space-between}.top .top-deco{width:100%;opacity:.1}.actions{flex:1 1 100%}.actions select{flex:1}}

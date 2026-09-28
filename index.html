@@ -6,14 +6,32 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header class="top">
+  <svg class="top-deco" viewBox="0 0 600 140" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+    <g fill="currentColor">
+      <rect x="330" y="92" width="26" height="48" rx="5" opacity=".35"/><rect x="368" y="76" width="26" height="64" rx="5" opacity=".4"/>
+      <rect x="406" y="84" width="26" height="56" rx="5" opacity=".45"/><rect x="444" y="60" width="26" height="80" rx="5" opacity=".5"/>
+      <rect x="482" y="44" width="26" height="96" rx="5" opacity=".55"/><rect x="520" y="26" width="26" height="114" rx="5" opacity=".6"/>
+      <rect x="558" y="10" width="26" height="130" rx="5" opacity=".65"/>
+    </g>
+    <path d="M300 118 L343 96 L381 104 L419 80 L457 70 L495 50 L533 34 L571 14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+  </svg>
   <div class="brand">
-    <h1>Meu Financeiro</h1>
-    <p id="status" class="muted small">Carregando planilha…</p>
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 48 48"><rect width="48" height="48" rx="13" fill="url(#lg)"/>
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a78d6"/><stop offset="1" stop-color="#1baf7a"/></linearGradient></defs>
+        <rect x="11" y="27" width="6" height="10" rx="1.5" fill="#fff" opacity=".75"/><rect x="21" y="21" width="6" height="16" rx="1.5" fill="#fff" opacity=".85"/><rect x="31" y="14" width="6" height="23" rx="1.5" fill="#fff"/>
+        <path d="M10 22 L20 15 L27 18 L38 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M33 9 H38 V14" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div>
+      <h1>Meu Financeiro</h1>
+      <p id="status" class="muted small">Carregando planilha…</p>
+    </div>
   </div>
+  <div class="top-spark" id="topSpark" hidden></div>
   <div class="actions">
     <select id="tema" aria-label="Tema">
       <option value="auto">Tema: automático</option>
