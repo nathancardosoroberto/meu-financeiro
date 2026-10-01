@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body class="travado">
 <header class="top">
@@ -91,6 +91,7 @@
       <div class="card"><div class="row-between"><h2>Ritmo do mês</h2><span class="muted small">gasto por dia x ritmo ideal</span></div><div class="chart"><canvas id="cRitmo"></canvas></div><p id="ritmoTxt"></p></div>
       <div class="card"><div class="row-between"><h2>Limites por categoria</h2><span class="muted small" id="limResumo"></span></div><div id="limites"></div><p class="muted small">Limites na aba Metas e Cortes. Gasto = compras do mês na aba Lançamentos (sem VR, já sem reembolsos).</p></div>
     </section>
+    <section class="card vr" id="vrCard" hidden><div class="row-between"><h2>Flash (VR) — <span id="vrTit"></span></h2><span class="muted small">quanto posso usar</span></div><div id="vrBody"></div></section>
     <section class="kpis" id="kpis"></section>
 
     <section class="card" id="itemCard" hidden>
