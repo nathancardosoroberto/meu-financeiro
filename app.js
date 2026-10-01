@@ -62,7 +62,8 @@
     const PG = "Plano de Gastos";
     D.minSemana = num(cell(wb, PG, "B3")); D.fechamento = num(cell(wb, PG, "B14")) || null; D.minMes = num(cell(wb, PG, "B4")); D.saldo = num(cell(wb, PG, "B16"));
     D.feriados = [];
-    if (wb.Sheets["Feriados"]) rows(wb, "Feriados").slice(1).forEach((r) => { const d = toDate(r[0]); if (d) D.feriados.push(ymd(d)); });
+    D.ferNac = [];
+    if (wb.Sheets["Feriados"]) rows(wb, "Feriados").slice(1).forEach((r) => { const d = toDate(r[0]); if (d) { D.feriados.push(ymd(d)); if (!txt(r[2]) || txt(r[2]) === "Nacional") D.ferNac.push(ymd(d)); } });
 
     // Projeção
     const pj = rows(wb, "Projeção");
@@ -191,7 +192,7 @@
     REF = referencia(new Date(), fer);
     const ms = DATA.meses.map((k, i) => [k, lab(k) + (DATA.tipo[i] === "Realizado" ? " (real)" : "")]);
     const clamp = (k) => (DATA.meses.includes(k) ? k : k < DATA.meses[0] ? DATA.meses[0] : DATA.meses[DATA.meses.length - 1]);
-    const def = clamp(REF.mes);
+    const def = clamp(mesAtual());
     let saved = {}; try { saved = JSON.parse(localStorage.getItem("dash-filtros")) || {}; } catch (_) {}
     // o mês sempre abre no mês de referência (regra do 5º dia útil)
     F.mes = def;
@@ -241,10 +242,12 @@
     if (m !== null && m !== "" && !isNaN(+m)) return { v: +m, fonte: "valor informado" };
     return { v: (DATA.plano[k] || {}).ja || 0, fonte: "aba Lançamentos" };
   }
+  function mesAtual() { const h = new Date(); return h.getFullYear() + "-" + pad(h.getMonth() + 1); }
   function semanasRestantes(k) {
     if (!REF) return 0;
-    if (k === REF.mes) { const hoje = new Date(); const d = Math.max(0, Math.ceil((REF.proximo - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 12)) / 864e5)); return d / 7; }
-    if (k < REF.mes) return 0;
+    const cal = mesAtual();
+    if (k === cal) { const h = new Date(); const ult = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate(); return (ult - h.getDate() + 1) / 7; }
+    if (k < cal) return 0;
     const [y, m] = k.split("-").map(Number); return new Date(y, m, 0).getDate() / 7;
   }
   function dividaInfo(d, k) {
@@ -337,18 +340,18 @@
     $("topSpark").hidden = false;
   }
   function renderHoje() {
-    const hoje = new Date(); const prox = addM(REF.mes, 1); const pp = DATA.plano[prox] || {};
+    const hoje = new Date(), cm = DATA.meses.includes(mesAtual()) ? mesAtual() : F.mes, pc = DATA.plano[cm] || {}, fc = formas(cm);
     const dias = Math.max(0, Math.ceil((REF.proximo - new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 12)) / 864e5));
-    const pr = DATA.plano[REF.mes] || {};
-    const fechado = !pr.teto;
+    const fechado = !pc.teto, card = DATA.cartoes[0] || "Inter", fch = DATA.fechamento;
+    const antesCorte = fch && hoje.getDate() <= fch && !fechado;
     $("hoje").innerHTML = `
       <div class="it"><div class="l">Hoje</div><div class="v">${fmtD(hoje)}</div></div>
-      <div class="it"><div class="l">Mês de referência</div><div class="v">${labL(REF.mes)}</div></div>
+      <div class="it"><div class="l">Mês vigente</div><div class="v">${labL(cm)}</div><div class="muted small">salário em uso: ${labL(REF.mes)}</div></div>
       <div class="it"><div class="l">Saldo em conta</div><div class="v">${R(DATA.saldo)}</div></div>
       <div class="it"><div class="l">Próximo 5º dia útil (salário)</div><div class="v">${fmtD(REF.proximo)}</div><div class="muted small">${dias === 0 ? "hoje" : "em " + dias + " dia" + (dias > 1 ? "s" : "")}</div></div>
-      <div class="it"><div class="l">Agora no crédito do ${esc(DATA.cartoes[0] || "Inter")}</div><div class="v">${R(formas(REF.mes).credSug)}</div><div class="muted small">${fechado ? "compras agora caem na próxima fatura, que já está no limite" : "sugerido"}</div></div>
-      <div class="it"><div class="l">Agora em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : formas(REF.mes).cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : "sugerido"}</div></div>
-      <div class="it"><div class="l">${labL(prox).split(" ")[0]}: sugerido / livre</div><div class="v">${R0(pp.teto)} / ${R0(pp.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
+      <div class="it"><div class="l">Crédito do ${esc(card)} em ${lab(cm)}</div><div class="v">${R(fechado ? 0 : fc.credSug)}</div><div class="muted small">${fechado ? "mês fechado" : antesCorte ? "sugerido · até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) + ", que já está no limite: espere o dia " + (fch + 1) : "sugerido (cai na fatura de " + lab(addM(cm, 1)) + ")"}</div></div>
+      <div class="it"><div class="l">Em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : fc.cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : fc.sobraMes < 0 ? "a conta de " + lab(cm) + " fecha negativa: evite" : "sugerido"}</div></div>
+      <div class="it"><div class="l">${lab(cm)}: sugerido / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
   }
 
   function formas(k) {
@@ -533,7 +536,7 @@
   const vrGasto = (m) => DATA.lanc.filter((l) => isVR(l) && l.ini === m).reduce((s, l) => s + l.total, 0);
   function vrSaldoIni(m) { let s = DATA.vrIni || 0; for (const k of DATA.meses) { if (k < DATA.planIni) continue; if (k >= m) break; s += vrMes(k) - vrGasto(k); } return s; }
   function diasRestantes(m) { const [y, mo] = m.split("-").map(Number), fim = new Date(y, mo, 0, 12), hoje = new Date(); hoje.setHours(12, 0, 0, 0);
-    const ini = hoje.getFullYear() === y && hoje.getMonth() + 1 === mo ? hoje : new Date(y, mo - 1, 1, 12); const fer = new Set(DATA.feriados);
+    const ini = hoje.getFullYear() === y && hoje.getMonth() + 1 === mo ? hoje : new Date(y, mo - 1, 1, 12); const fer = new Set(DATA.ferNac || DATA.feriados);
     let cor = 0, ut = 0; for (let d = new Date(ini); d <= fim; d.setDate(d.getDate() + 1)) { cor++; const w = d.getDay(); if (w > 0 && w < 6 && !fer.has(ymd(d))) ut++; } return { cor, ut, total: fim.getDate() }; }
   function renderVR() {
     const hoje = new Date(), cal = hoje.getFullYear() + "-" + pad(hoje.getMonth() + 1);
@@ -544,7 +547,7 @@
     $("vrBody").innerHTML = `<div class="kpis">
         <div class="kpi"><div class="l">${futuro ? "VR previsto do mês" : "Saldo no Flash agora"}</div><div class="v ${saldo < 0 ? "neg" : ""}">${R(saldo)}</div><div class="s">${futuro ? "mais o que sobrar dos meses anteriores" : R(ini) + " que sobrou + " + R(rec) + " do mês" + (g ? " − " + R(g) + " gastos" : "")}</div></div>
         <div class="kpi"><div class="l">Por semana</div><div class="v">${R(saldo / Math.max(1, dr.cor / 7))}</div><div class="s">${(dr.cor / 7).toFixed(1).replace(".", ",")} semanas ${futuro ? "no mês" : "até o fim do mês"}</div></div>
-        <div class="kpi"><div class="l">Por dia útil</div><div class="v">${R(dr.ut ? saldo / dr.ut : 0)}</div><div class="s">${dr.ut} dias úteis ${futuro ? "no mês" : "restantes (com hoje)"}</div></div>
+        <div class="kpi"><div class="l">Por dia útil</div><div class="v">${R(dr.ut ? saldo / dr.ut : 0)}</div><div class="s">${dr.ut} dias úteis (seg a sex, sem feriados nacionais) ${futuro ? "no mês" : "restantes, com hoje"}</div></div>
         <div class="kpi"><div class="l">Por dia corrido</div><div class="v">${R(saldo / Math.max(1, dr.cor))}</div><div class="s">${dr.cor} dias ${futuro ? "no mês" : "restantes (com hoje)"}</div></div></div>
       <div class="meter"><div class="t"><span>Usado em ${lab(m)}: ${R(g)}</span><span>${P(usado)} do disponível</span></div><div class="bar"><span style="width:${Math.min(100, usado * 100)}%;background:${usado > 1 ? css("--bad") : css("--s3")}"></span></div></div>
       <p class="muted small">Só o VR do mês daria ${R(rec / (dr.total / 7))}/semana. O que sobra no Flash passa para o mês seguinte (não vira reserva em dinheiro).${DATA.vrIni ? "" : " Saldo que sobrou antes do plano: R$ 0 (ajuste em Metas e Cortes se tinha algo)."}</p>` +
