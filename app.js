@@ -123,6 +123,11 @@
         D.mc.ass.push({ nome: t, paga: txt(x[1]), valor: num(x[2]), ano: num(x[3]), ate: ym(x[4]) || txt(x[4]), manter: txt(x[5]) || "Avaliar" }); } }
     D.vrIni = 0;
     if (wb.Sheets["Metas e Cortes"]) { const mt2 = rows(wb, "Metas e Cortes"); const vi = findRow(mt2, (t) => t.startsWith("VR (FLASH)")); if (vi >= 0) D.vrIni = num(mt2[vi + 1] && mt2[vi + 1][1]); }
+    // Pagamentos feitos
+    D.pagos = [];
+    if (wb.Sheets["Pagamentos"]) { const pg = rows(wb, "Pagamentos"); const ph2 = findRow(pg, (t) => t.startsWith("Mês da conta"));
+      for (let i = ph2 + 1; i < pg.length; i++) { const r = pg[i]; if (!r) continue; const m = ym(r[0]), n = txt(r[1]); if (!m || !n) continue;
+        D.pagos.push({ mes: m, nome: n, valor: num(r[2]), data: toDate(r[3]) ? ymd(toDate(r[3])) : "", obs: txt(r[4]) }); } }
     // Faturas (previsto x real)
     D.fats = [];
     if (wb.Sheets["Faturas"]) rows(wb, "Faturas").slice(3).forEach((x) => { const m = ym(x && x[0]); if (m && txt(x[1])) D.fats.push({ mes: m, card: txt(x[1]), valor: num(x[2]), status: txt(x[3]), prev: num(x[4]) }); });
@@ -351,6 +356,7 @@
       <div class="it"><div class="l">Próximo 5º dia útil (salário)</div><div class="v">${fmtD(REF.proximo)}</div><div class="muted small">${dias === 0 ? "hoje" : "em " + dias + " dia" + (dias > 1 ? "s" : "")}</div></div>
       <div class="it"><div class="l">Crédito do ${esc(card)} em ${lab(cm)}</div><div class="v">${R(fechado ? 0 : fc.credSug)}</div><div class="muted small">${fechado ? "mês fechado" : antesCorte ? "sugerido · até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) + ", que já está no limite: espere o dia " + (fch + 1) : "sugerido (cai na fatura de " + lab(addM(cm, 1)) + ")"}</div></div>
       <div class="it"><div class="l">Em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : fc.cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : fc.sobraMes < 0 ? "a conta de " + lab(cm) + " fecha negativa: evite" : "sugerido"}</div></div>
+      ${(() => { const pd = contasMes(cm).filter((c) => !c.pago); return `<div class="it"><div class="l">Contas a pagar em ${lab(cm)}</div><div class="v ${pd.length ? "neg" : ""}">${R(pd.reduce((s, c) => s + c.valor, 0))}</div><div class="muted small">${pd.length ? pd.map((c) => esc(c.nome.replace(/^Fatura /, ""))).join(", ") : "tudo pago"}</div></div>`; })()}
       <div class="it"><div class="l">${lab(cm)}: sugerido / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
   }
 
@@ -527,7 +533,34 @@
     $("lResumo").textContent = lc.length ? `${lc.length} lançamento(s) cobrados em ${lab(k)} · ${R(tl)}` : "Nenhum lançamento cobrado neste mês. Adicione na aba Lançamentos da planilha.";
     $("tLanc").innerHTML = `<tr><th>Descrição</th><th>Data</th><th>Forma</th><th>Valor total</th><th>Parcelas</th><th>Cobrado no mês</th><th>Meu custo</th></tr>` +
       lc.map((l) => `<tr><td>${esc(l.desc)}</td><td>${l.data.split("-").reverse().join("/")}</td><td>${esc(l.paga)}</td><td>${R(l.total)}</td><td>${l.parcelado ? (diffM(l.ini, k) + 1) + "/" + l.n : "à vista"}</td><td>${R(l.valor)}</td><td>${R(l.custo)}</td></tr>`).join("");
-    renderRecebidos(k); renderLibera(k); renderPrevReal();
+    renderContas(k); renderRecebidos(k); renderLibera(k); renderPrevReal();
+  }
+
+  // ---------- contas do mês: pago x pendente ----------
+  const norm = (t) => txt(t).toLowerCase().replace(/\s+/g, " ");
+  function contasMes(k) {
+    const j = idx(k), out = [];
+    DATA.fixos.filter((f) => ativo(f, k) && f.valor > 0 && !DATA.cartoes.includes(f.paga) && f.paga !== "VR").forEach((f) => out.push({ nome: f.desc, valor: f.valor, dia: f.dia, tipo: "Conta" }));
+    DATA.dividas.filter((d) => ativo(d, k) && d.valor > 0 && !DATA.cartoes.includes(d.paga) && d.paga !== "VR").forEach((d) => out.push({ nome: d.desc, valor: d.valor, dia: null, tipo: "Parcela" }));
+    DATA.cartoes.forEach((c) => { const v = j >= 0 ? (DATA.faturas[c] || [])[j] || 0 : 0; if (v > 0.005) out.push({ nome: "Fatura " + c, valor: v, dia: DATA.venc[c], tipo: "Fatura" }); });
+    const pg = DATA.pagos.filter((p) => p.mes === k), usados = new Set();
+    out.forEach((o) => { const p = pg.find((x, n) => !usados.has(n) && norm(x.nome) === norm(o.nome)); if (p) { usados.add(pg.indexOf(p)); o.pago = p; } });
+    pg.forEach((p, n) => { if (!usados.has(n)) out.push({ nome: p.nome, valor: p.valor, dia: null, tipo: "Outro", pago: p }); });
+    return out;
+  }
+  function renderContas(k) {
+    const cs = contasMes(k), pagas = cs.filter((c) => c.pago), pend = cs.filter((c) => !c.pago);
+    const tP = pagas.reduce((s, c) => s + (c.pago.valor || c.valor), 0), tF = pend.reduce((s, c) => s + c.valor, 0), tot = tP + tF;
+    $("cResumo").textContent = `${lab(k)} · ${pagas.length} de ${cs.length} pagas`;
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const venc = (c) => { const d = diaVenc(k, c.dia); if (!d) return "—"; const late = !c.pago && d < hoje; return `<span class="${late ? "neg" : ""}">${fmtD(d)}${late ? " (vencida)" : ""}</span>`; };
+    $("cBody").innerHTML = `<div class="kpis">
+        <div class="kpi"><div class="l">Já pago</div><div class="v pos">${R(tP)}</div><div class="s">${pagas.length} conta(s)</div></div>
+        <div class="kpi"><div class="l">Falta pagar</div><div class="v ${tF > 0.005 ? "neg" : ""}">${R(tF)}</div><div class="s">${pend.length} conta(s)</div></div></div>
+      <div class="meter"><div class="t"><span>Pago</span><span>${P(tot ? tP / tot : 0)}</span></div><div class="bar"><span style="width:${tot ? (tP / tot) * 100 : 0}%;background:${css("--good")}"></span></div></div>
+      <div class="tblwrap"><table class="tbl"><tr><th>Conta</th><th>Valor</th><th>Vence</th><th>Situação</th></tr>` +
+      pend.concat(pagas).map((c) => `<tr><td>${esc(c.nome)}</td><td>${R(c.pago && c.pago.valor ? c.pago.valor : c.valor)}</td><td>${venc(c)}</td><td>${c.pago ? `<span class="tag good">Pago${c.pago.data ? " " + c.pago.data.split("-").reverse().slice(0, 2).join("/") : ""}</span>` : `<span class="tag bad">Pendente</span>`}</td></tr>`).join("") +
+      `</table></div><p class="muted small">Marque o que pagou na aba Pagamentos da planilha (mês, nome da conta e valor). Valores pendentes são os previstos: condomínio e energia ainda estimados.</p>`;
   }
 
   // ---------- VR (Flash) ----------
