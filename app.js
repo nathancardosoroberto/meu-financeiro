@@ -123,6 +123,11 @@
         D.mc.ass.push({ nome: t, paga: txt(x[1]), valor: num(x[2]), ano: num(x[3]), ate: ym(x[4]) || txt(x[4]), manter: txt(x[5]) || "Avaliar" }); } }
     D.vrIni = 0;
     if (wb.Sheets["Metas e Cortes"]) { const mt2 = rows(wb, "Metas e Cortes"); const vi = findRow(mt2, (t) => t.startsWith("VR (FLASH)")); if (vi >= 0) D.vrIni = num(mt2[vi + 1] && mt2[vi + 1][1]); }
+    // Recebimentos por item
+    D.recItens = [];
+    if (wb.Sheets["Recebimentos"]) { const rb = rows(wb, "Recebimentos"); const rh2 = findRow(rb, (t) => t.startsWith("Mês da conta"));
+      for (let i = rh2 + 1; i < rb.length; i++) { const r = rb[i]; if (!r) continue; const m = ym(r[0]), p = txt(r[1]), it = txt(r[2]); if (!m || !p || !num(r[3])) continue;
+        D.recItens.push({ mes: m, pessoa: p, item: it, valor: num(r[3]), data: toDate(r[4]) ? ymd(toDate(r[4])) : "" }); } }
     // Pagamentos feitos
     D.pagos = [];
     if (wb.Sheets["Pagamentos"]) { const pg = rows(wb, "Pagamentos"); const ph2 = findRow(pg, (t) => t.startsWith("Mês da conta"));
@@ -265,10 +270,10 @@
   function diaVenc(k, dia) { if (!dia) return null; const [y, m] = k.split("-").map(Number); const ult = new Date(y, m, 0).getDate(); return new Date(y, m - 1, Math.min(dia, ult), 12); }
   function receber(k) {
     const out = [];
-    const push = (pessoa, valor, item, origem, quando) => { if (pessoa && pessoa !== "-" && valor > 0.004) out.push({ pessoa, valor, item, origem, quando }); };
+    const push = (pessoa, valor, item, origem, quando, base) => { if (pessoa && pessoa !== "-" && valor > 0.004) out.push({ pessoa, valor, item, origem, quando, base: base || item }); };
     DATA.fixos.filter((f) => ativo(f, k)).forEach((f) => { const q = diaVenc(k, f.dia); push(f.q1, f.r1, f.desc, "Conta fixa", q); push(f.q2, f.r2, f.desc, "Conta fixa", q); });
     DATA.dividas.filter((d) => ativo(d, k)).forEach((d) => { const q = diaVenc(k, DATA.venc[d.paga]); const inf = dividaInfo(d, k);
-      const t = d.desc + (inf.atual ? " (" + inf.atual + ")" : ""); push(d.q1, d.r1, t, "Parcela " + d.paga, q); push(d.q2, d.r2, t, "Parcela " + d.paga, q); });
+      const t = d.desc + (inf.atual ? " (" + inf.atual + ")" : ""); push(d.q1, d.r1, t, "Parcela " + d.paga, q, d.desc); push(d.q2, d.r2, t, "Parcela " + d.paga, q, d.desc); });
     DATA.lanc.filter((l) => l.ini && l.ini <= k && l.fim >= k).forEach((l) => { const q = diaVenc(k, DATA.venc[l.paga]); push(l.q1, l.r1, l.desc, "Lançamento", q); push(l.q2, l.r2, l.desc, "Lançamento", q); });
     return out;
   }
@@ -490,6 +495,12 @@
     cc.options.plugins.legend.display = false; cc.update();
   }
 
+  function statusReceber(k, rc) {
+    const n = (t) => txt(t).toLowerCase().replace(/\s+/g, " "), pool = DATA.recItens.filter((r) => r.mes === k).map((r) => Object.assign({ resto: r.valor }, r));
+    rc.forEach((r) => { let pago = 0, dt = ""; pool.filter((p) => n(p.pessoa) === n(r.pessoa) && n(p.item) === n(r.base) && p.resto > 0.004).forEach((p) => { const u = Math.min(p.resto, r.valor - pago); if (u > 0) { p.resto -= u; pago += u; dt = dt || p.data; } });
+      r.pago = pago; r.dataPago = dt; r.st = pago >= r.valor - 0.015 ? "pago" : pago > 0.004 ? "parcial" : "pendente"; });
+    return pool.filter((p) => p.resto > 0.015);
+  }
   function renderDividas() {
     const k = F.mes, i = idx(k), ent = DATA.proj.entradas[i] || 0, cor = pal();
     // a receber
@@ -497,9 +508,15 @@
     const porPessoa = {}; rc.forEach((r) => (porPessoa[r.pessoa] = (porPessoa[r.pessoa] || 0) + r.valor));
     $("rResumo").textContent = Object.entries(porPessoa).map(([p, v]) => p + ": " + R(v)).join(" · ") || "nada a receber";
     rc.sort((a, b) => a.pessoa.localeCompare(b.pessoa) || (a.quando || 0) - (b.quando || 0));
-    $("tReceber").innerHTML = `<tr><th>Item</th><th>Pessoa</th><th>Origem</th><th>Valor</th><th>Receber até</th></tr>` +
-      rc.map((r) => `<tr><td>${esc(r.item)}</td><td>${esc(r.pessoa)}</td><td>${esc(r.origem)}</td><td>${R(r.valor)}</td><td>${r.quando ? fmtD(r.quando) : "vencimento (dia não informado)"}</td></tr>`).join("") +
-      Object.entries(porPessoa).map(([p, v]) => `<tr class="total"><td>Total ${esc(p)}</td><td></td><td></td><td>${R(v)}</td><td></td></tr>`).join("");
+    const sobras = statusReceber(k, rc);
+    rc.sort((a, b) => (a.st === "pago") - (b.st === "pago") || a.pessoa.localeCompare(b.pessoa) || (a.quando || 0) - (b.quando || 0));
+    const tag = (r) => r.st === "pago" ? `<span class="tag good">Pago${r.dataPago ? " " + r.dataPago.split("-").reverse().slice(0, 2).join("/") : ""}</span>` : r.st === "parcial" ? `<span class="tag">Parcial: falta ${R(r.valor - r.pago)}</span>` : `<span class="tag bad">Pendente</span>`;
+    const tot = {}; rc.forEach((r) => { const o = tot[r.pessoa] || (tot[r.pessoa] = { v: 0, p: 0 }); o.v += r.valor; o.p += r.pago; });
+    $("rResumo").textContent = Object.entries(tot).map(([p, o]) => `${p}: recebido ${R(o.p)} · falta ${R(Math.max(0, o.v - o.p))}`).join("  |  ") || "nada a receber";
+    $("tReceber").innerHTML = `<tr><th>Item</th><th>Pessoa</th><th>Origem</th><th>Valor</th><th>Receber até</th><th>Situação</th></tr>` +
+      rc.map((r) => `<tr class="${r.st === "pago" ? "fora" : ""}"><td>${esc(r.item)}</td><td>${esc(r.pessoa)}</td><td>${esc(r.origem)}</td><td>${R(r.valor)}</td><td>${r.quando ? fmtD(r.quando) : "—"}</td><td>${tag(r)}</td></tr>`).join("") +
+      Object.entries(tot).map(([p, o]) => `<tr class="total"><td>Total ${esc(p)}</td><td></td><td></td><td>${R(o.v)}</td><td></td><td>${o.p >= o.v - 0.015 ? '<span class="tag good">Tudo pago</span>' : '<span class="tag bad">Falta ' + R(o.v - o.p) + "</span>"}</td></tr>`).join("") +
+      (sobras.length ? `<tr><td colspan="6" class="muted small" style="text-align:left">Recebido sem item correspondente: ${sobras.map((s) => esc(s.pessoa) + " " + R(s.resto) + " (" + esc(s.item) + ")").join(", ")}</td></tr>` : "");
     // fixos
     let fx = DATA.fixos.filter((f) => ativo(f, k) && passaForma(f.paga));
     if (F.reemb === "com") fx = fx.filter((f) => f.r1 + f.r2 > 0); else if (F.reemb === "sem") fx = fx.filter((f) => !(f.r1 + f.r2));
