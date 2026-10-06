@@ -415,7 +415,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
+    renderContas(k, "g"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
       ["Fora do Inter disponível", R(p.fora), "13º livre + férias (Pix/débito)"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
@@ -548,13 +548,13 @@
     pg.forEach((p, n) => { if (!usados.has(n)) out.push({ nome: p.nome, valor: p.valor, dia: null, tipo: "Outro", pago: p }); });
     return out;
   }
-  function renderContas(k) {
+  function renderContas(k, pre = "c") {
     const cs = contasMes(k), pagas = cs.filter((c) => c.pago), pend = cs.filter((c) => !c.pago);
     const tP = pagas.reduce((s, c) => s + (c.pago.valor || c.valor), 0), tF = pend.reduce((s, c) => s + c.valor, 0), tot = tP + tF;
-    $("cResumo").textContent = `${lab(k)} · ${pagas.length} de ${cs.length} pagas`;
+    $(pre + "Resumo").textContent = `${lab(k)} · ${pagas.length} de ${cs.length} pagas`;
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const venc = (c) => { const d = diaVenc(k, c.dia); if (!d) return "—"; const late = !c.pago && d < hoje; return `<span class="${late ? "neg" : ""}">${fmtD(d)}${late ? " (vencida)" : ""}</span>`; };
-    $("cBody").innerHTML = `<div class="kpis">
+    $(pre + "Body").innerHTML = `<div class="kpis">
         <div class="kpi"><div class="l">Já pago</div><div class="v pos">${R(tP)}</div><div class="s">${pagas.length} conta(s)</div></div>
         <div class="kpi"><div class="l">Falta pagar</div><div class="v ${tF > 0.005 ? "neg" : ""}">${R(tF)}</div><div class="s">${pend.length} conta(s)</div></div></div>
       <div class="meter"><div class="t"><span>Pago</span><span>${P(tot ? tP / tot : 0)}</span></div><div class="bar"><span style="width:${tot ? (tP / tot) * 100 : 0}%;background:${css("--good")}"></span></div></div>

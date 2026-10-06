@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body class="travado">
 <header class="top">
@@ -70,6 +70,7 @@
   <!-- ============ VISÃO GERAL ============ -->
   <div class="tab" id="tab-geral">
     <section class="card hoje" id="hoje"></section>
+    <section class="card contas"><div class="row-between"><h2>Contas do mês: pago x pendente</h2><p class="muted small" id="gResumo"></p></div><div id="gBody"></div></section>
 
     <section class="hero card">
       <div class="hero-main">
