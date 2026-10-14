@@ -56,6 +56,7 @@
     const D = {};
     const C = "Configurações";
     D.ini = ym(cell(wb, C, "B3")); D.refPlanilha = ym(cell(wb, C, "B4"));
+    D.versao = txt(cell(wb, C, "E3"));
     D.reservaInformada = num(cell(wb, C, "B5")); D.pct = num(cell(wb, C, "B6")); D.meta = D.pct > 1 ? D.pct : 0; D.planIni = ym(cell(wb, C, "B8")) || D.ini;
     D.cartoes = []; D.venc = {};
     for (let r = 11; r <= 15; r++) { const n = txt(cell(wb, C, "A" + r)); if (n && n !== "-") { D.cartoes.push(n); D.venc[n] = num(cell(wb, C, "B" + r)) || null; } }
@@ -151,7 +152,7 @@
     DATA = extract(wb);
     const stamp = new Date().toLocaleString("pt-BR");
     try { localStorage.setItem("dash-data", JSON.stringify({ DATA, stamp, origem })); } catch (e) {}
-    setStatus("Atualizado de " + origem + " em " + stamp);
+    setStatus("Atualizado de " + origem + " em " + stamp + (DATA.versao ? " · planilha versão " + DATA.versao : " · planilha sem número de versão (antiga)"));
     boot();
   }
   async function load() {
@@ -420,7 +421,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderContas(k, "g"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
+    renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
       ["Fora do Inter disponível", R(p.fora), "13º livre + férias (Pix/débito)"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
@@ -501,6 +502,17 @@
       r.pago = pago; r.dataPago = dt; r.st = pago >= r.valor - 0.015 ? "pago" : pago > 0.004 ? "parcial" : "pendente"; });
     return pool.filter((p) => p.resto > 0.015);
   }
+  function renderCompras(k, tid, rid) {
+    let lc = DATA.lanc.filter((l) => l.data.slice(0, 7) === k && passaForma(l.paga));
+    if (F.item && F.item.startsWith("L|")) lc = lc.filter((l) => l.desc === F.item.slice(2));
+    lc.sort((a, b) => (a.data < b.data ? 1 : -1));
+    const cart = lc.filter((l) => DATA.cartoes.includes(l.paga)), vr = lc.filter((l) => l.paga === "VR"), out = lc.filter((l) => !DATA.cartoes.includes(l.paga) && l.paga !== "VR");
+    const sm = (a) => a.reduce((s, l) => s + l.total, 0);
+    $(rid).textContent = lc.length ? `${lc.length} compra(s) em ${lab(k)} · cartão ${R(sm(cart))} · Flash ${R(sm(vr))}${out.length ? " · Pix/débito " + R(sm(out)) : ""}` : "Nenhuma compra lançada neste mês.";
+    const cai = (l) => l.paga === "VR" ? "Flash (na hora)" : DATA.cartoes.includes(l.paga) ? "fatura de " + lab(l.ini) + (l.parcelado ? " até " + lab(l.fim) : "") : "na hora";
+    $(tid).innerHTML = `<tr><th>Compra</th><th>Data</th><th>Forma</th><th>Categoria</th><th>Valor</th><th>Parcelas</th><th>Cai em</th></tr>` +
+      lc.map((l) => `<tr><td>${esc(l.desc)}</td><td>${l.data.split("-").reverse().slice(0, 2).join("/")}</td><td>${esc(l.paga === "VR" ? "Flash (VR)" : l.paga)}</td><td>${esc(l.cat)}</td><td>${R(l.total)}</td><td>${l.parcelado ? l.n + "x de " + R(l.valor) : "à vista"}</td><td>${cai(l)}</td></tr>`).join("");
+  }
   function renderDividas() {
     const k = F.mes, i = idx(k), ent = DATA.proj.entradas[i] || 0, cor = pal();
     // a receber
@@ -543,13 +555,7 @@
     const ch = draw("cDividas", "bar", dvc.map((d) => { const t = d.desc.replace(" (a identificar)", "").replace(" — ", " · "); return (/fim /.test(t) ? t : t + " · até " + lab(d.fim)).slice(0, 50); }),
       [ds("Ainda a pagar", dvc.map((d) => d.aPagar), dvc.map((d) => cor[Math.max(0, DATA.cartoes.indexOf(d.paga)) % 6]))], baseOpts(false, (v) => R0(v), { indexAxis: "y", animation: false }));
     ch.options.plugins.legend.display = false; ch.update();
-    // lançamentos
-    let lc = DATA.lanc.filter((l) => l.ini && l.ini <= k && l.fim >= k && passaForma(l.paga));
-    if (F.item && F.item.startsWith("L|")) lc = lc.filter((l) => l.desc === F.item.slice(2));
-    const tl = lc.reduce((s, l) => s + l.valor, 0);
-    $("lResumo").textContent = lc.length ? `${lc.length} lançamento(s) cobrados em ${lab(k)} · ${R(tl)}` : "Nenhum lançamento cobrado neste mês. Adicione na aba Lançamentos da planilha.";
-    $("tLanc").innerHTML = `<tr><th>Descrição</th><th>Data</th><th>Forma</th><th>Valor total</th><th>Parcelas</th><th>Cobrado no mês</th><th>Meu custo</th></tr>` +
-      lc.map((l) => `<tr><td>${esc(l.desc)}</td><td>${l.data.split("-").reverse().join("/")}</td><td>${esc(l.paga)}</td><td>${R(l.total)}</td><td>${l.parcelado ? (diffM(l.ini, k) + 1) + "/" + l.n : "à vista"}</td><td>${R(l.valor)}</td><td>${R(l.custo)}</td></tr>`).join("");
+    renderCompras(k, "tLanc", "lResumo");
     renderContas(k); renderRecebidos(k); renderLibera(k); renderPrevReal();
   }
 
