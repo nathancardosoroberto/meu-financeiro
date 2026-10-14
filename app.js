@@ -84,7 +84,7 @@
     // Plano de Gastos
     const pl = rows(wb, PG);
     const ph = findRow(pl, (t) => t === "Mês das compras");
-    const K = ["mes","fatura","espaco","teto","semana","vista","parc","vezes","parcMax","simult","fora","vr","total","faturaInter","limite","reserva","reservaAc","ja","ainda","meta","livre","livreResta","reservaRend"];
+    const K = ["mes","fatura","espaco","teto","semana","vista","parc","vezes","parcMax","simult","fora","vr","total","faturaInter","limite","reserva","reservaAc","ja","ainda","meta","livre","livreResta","reservaRend","foraRes"];
     D.plano = {};
     for (let i = ph + 1; i < pl.length; i++) {
       const r = pl[i]; if (!r || txt(r[0]).startsWith("TOTAL")) break; const k = ym(r[0]); if (!k) continue;
@@ -361,7 +361,7 @@
       <div class="it"><div class="l">Saldo em conta</div><div class="v">${R(DATA.saldo)}</div></div>
       <div class="it"><div class="l">Próximo 5º dia útil (salário)</div><div class="v">${fmtD(REF.proximo)}</div><div class="muted small">${dias === 0 ? "hoje" : "em " + dias + " dia" + (dias > 1 ? "s" : "")}</div></div>
       <div class="it"><div class="l">Crédito do ${esc(card)} em ${lab(cm)}</div><div class="v">${R(fechado ? 0 : fc.credSug)}</div><div class="muted small">${fechado ? "mês fechado" : antesCorte ? "sugerido · até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) + ", que já está no limite: espere o dia " + (fch + 1) : "sugerido (cai na fatura de " + lab(addM(cm, 1)) + ")"}</div></div>
-      <div class="it"><div class="l">Em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : fc.cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : fc.sobraMes < 0 ? "a conta de " + lab(cm) + " fecha negativa: evite" : "sugerido"}</div></div>
+      <div class="it"><div class="l">Em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : fc.cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : fc.cashSug <= 0 ? "a conta de " + lab(cm) + " fecha negativa: evite" : "sem mexer na reserva · máx. " + R(fc.cashMax)}</div></div>
       ${(() => { const pd = contasMes(cm).filter((c) => !c.pago); return `<div class="it"><div class="l">Contas a pagar em ${lab(cm)}</div><div class="v ${pd.length ? "neg" : ""}">${R(pd.reduce((s, c) => s + c.valor, 0))}</div><div class="muted small">${pd.length ? pd.map((c) => esc(c.nome.replace(/^Fatura /, ""))).join(", ") : "tudo pago"}</div></div>`; })()}
       <div class="it"><div class="l">${lab(cm)}: sugerido / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
   }
@@ -374,9 +374,9 @@
     return {
       fechado, ja, cashJa, sobraMes,
       credSug: fechado ? 0 : (p.teto || 0) - ja, credMax: fechado ? 0 : (p.espaco || 0) - ja,
-      cashSug: Math.max(0, (p.fora || 0) + Math.max(0, sobraMes - (prev.meta || 0)) - cashJa),
-      cashMax: Math.max(0, (p.fora || 0) + Math.max(0, sobraMes) - cashJa),
-      fora: p.fora || 0, vr: p.vr || 0, fatura: p.fatura, meta: prev.meta || 0,
+      cashSug: Math.max(0, (p.fora || 0) + (sobraMes < 0 ? sobraMes : Math.max(0, sobraMes - (prev.meta || 0))) - cashJa),
+      cashMax: Math.max(0, (p.fora || 0) + (p.foraRes || 0) + sobraMes - cashJa),
+      foraRes: p.foraRes || 0, fora: p.fora || 0, vr: p.vr || 0, fatura: p.fatura, meta: prev.meta || 0,
     };
   }
   function renderFormas(k) {
@@ -393,13 +393,16 @@
     const cash = `<div class="card forma cash">
       <h2>Em dinheiro (Pix / débito)</h2>
       <p class="quando">Sai da conta na hora, então usa o que sobrou do salário de ${mesL} depois das contas e faturas de ${mesL}${f.fora ? ", mais o 13º livre/férias que entram neste mês" : ""}.</p>
-      <div class="muted small">Sugerido (sem mexer nos ${P(DATA.pct)} da reserva)</div>
+      <div class="muted small">Sem mexer na reserva</div>
       <div class="big2">${R(f.cashSug)}</div>
-      <div class="linha"><span>Máximo (usando o que iria para a reserva)</span><b>${R(f.cashMax)}</b></div>
-      <div class="linha"><span>Sobra na conta depois de pagar tudo</span><b class="${f.sobraMes < 0 ? "neg" : ""}">${R(f.sobraMes)}</b></div>
-      ${f.fora ? `<div class="linha"><span>13º livre / férias do mês</span><b>${R(f.fora)}</b></div>` : ""}
-      <div class="linha"><span>VR / Flash (supermercado)</span><b>${R(f.vr)}</b></div>
-      ${f.sobraMes < 0 ? `<p class="icon-bad">A conta fecha negativa em ${R(f.sobraMes)} neste mês: não use Pix/débito e cubra a diferença com a reserva.</p>` : ""}</div>`;
+      <div class="linha"><span><b>Usando a reserva do mês</b> (máximo)</span><b>${R(f.cashMax)}</b></div>
+      <div class="linha"><span>Sobra do salário depois de pagar tudo</span><b class="${f.sobraMes < 0 ? "neg" : ""}">${R(f.sobraMes)}</b></div>
+      ${f.fora ? `<div class="linha"><span>13º / férias livres</span><b>${R(f.fora)}</b></div>` : ""}
+      ${f.foraRes ? `<div class="linha"><span>13º / férias separados para a reserva</span><b>${R(f.foraRes)}</b></div>` : ""}
+      ${f.cashJa ? `<div class="linha"><span>Já gasto em Pix/débito neste mês</span><b>${R(f.cashJa)}</b></div>` : ""}
+      <div class="linha"><span>VR / Flash (supermercado, à parte)</span><b>${R(f.vr)}</b></div>
+      ${f.sobraMes < 0 ? (f.fora ? `<p class="muted small">O salário fecha em ${R(f.sobraMes)}; esse buraco já foi descontado do 13º/férias livres.</p>` : `<p class="icon-bad">A conta fecha negativa em ${R(f.sobraMes)} neste mês: não use Pix/débito e cubra a diferença com a reserva.</p>`) : ""}
+      ${f.cashMax > f.cashSug ? `<p class="muted small">Gastar acima de ${R(f.cashSug)} tira dinheiro da reserva.</p>` : ""}</div>`;
     $("formas").innerHTML = cred + cash;
   }
 
