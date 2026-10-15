@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body class="travado">
 <header class="top">
@@ -86,6 +86,13 @@
       </div>
     </section>
 
+    <section class="card" id="cabeCard">
+      <div class="row-between"><h2>Quanto cabe numa compra no <span class="cardname">Inter</span></h2>
+        <label class="muted small cabe-in">Valor da compra <input id="cabeValor" type="number" step="0.01" min="0" placeholder="ex.: 600"></label></div>
+      <p class="muted small" id="cabeInfo"></p>
+      <div class="tblwrap"><table class="tbl" id="cabeTbl"></table></div>
+      <div class="tblwrap"><table class="tbl" id="cabeMeses"></table></div>
+    </section>
     <section class="card" id="saude"></section>
     <section class="card"><div class="row-between"><h2>Compras do mês</h2><p class="muted small" id="gLResumo"></p></div><div class="tblwrap"><table class="tbl" id="gLanc"></table></div></section>
     <section class="grid2" id="formas"></section>

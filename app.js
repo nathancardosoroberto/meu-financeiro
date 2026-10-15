@@ -241,6 +241,7 @@
     if (F.item) t.push(F.item.slice(2)); if (F.unid === "pct") t.push("em %");
     $("fAtivos").textContent = t.join(" · ");
   }
+  $("cabeValor").addEventListener("input", () => renderCabe(F.mes));
   $("gastoManual").addEventListener("input", (e) => { try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + F.mes) : localStorage.setItem("gasto-" + F.mes, v); } catch (_) {} renderGeral(true); });
 
   // ---------- cálculos ----------
@@ -379,6 +380,31 @@
       foraRes: p.foraRes || 0, fora: p.fora || 0, vr: p.vr || 0, fatura: p.fatura, meta: prev.meta || 0,
     };
   }
+  // Quanto cabe numa compra no cartão: cada parcela ocupa o espaço de um mês de compras (k, k+1, ...)
+  function renderCabe(k) {
+    const box = $("cabeCard"), p0 = DATA.plano[k] || {};
+    if (!p0.teto) { box.hidden = true; return; } box.hidden = false;
+    const ms = [], room = {};
+    for (let j = 0; j < 6; j++) { const m = addM(k, j), p = DATA.plano[m]; if (!p || !p.teto) break; ms.push(m);
+      room[m] = Math.max(0, (p.teto || 0) - (j === 0 ? gastoInter(m).v : p.ja || 0)); }
+    const val = parseFloat($("cabeValor").value) || 0, card = esc(DATA.cartoes[0] || "Inter");
+    const fat = (m) => lab(addM(m, 1));
+    $("cabeInfo").innerHTML = `Comprando hoje, a 1ª parcela cai na fatura de ${fat(k)}. Cada parcela usa o espaço de um mês; a compra cabe se nenhum mês estoura. ` +
+      `Regra do plano para parcelas novas: até ${R(p0.parc)}/mês em até ${p0.vezes || "—"}x — acima disso cabe, mas aperta.`;
+    let rows = `<tr><th>Vezes</th><th>Compra máxima</th><th>Parcela máx.</th>${val ? "<th>Sua compra</th><th>Cabe?</th><th>Sobra no mês mais apertado</th>" : "<th>Mês que limita</th>"}</tr>`;
+    for (let n = 1; n <= ms.length; n++) {
+      const sub = ms.slice(0, n), lim = sub.reduce((a, m) => (room[m] < room[a] ? m : a), sub[0]), pmax = room[lim], max = pmax * n;
+      if (!val) { rows += `<tr><td>${n === 1 ? "À vista" : n + "x"}</td><td class="big3">${R(max)}</td><td>${R(pmax)}</td><td class="muted">${lab(lim)} (fatura ${fat(lim)})</td></tr>`; continue; }
+      const parc = val / n, sobra = Math.min(...sub.map((m) => room[m] - parc)), ok = sobra >= -0.005, regra = n <= (p0.vezes || 0) && parc <= (p0.parc || 0) + 0.005;
+      rows += `<tr class="${ok ? "ok" : "no"}"><td>${n === 1 ? "À vista" : n + "x"}</td><td>${R(max)}</td><td>${R(pmax)}</td><td class="big3">${n === 1 ? R(val) : n + " × " + R(parc)}</td>` +
+        `<td class="${ok ? "pos" : "neg"}">${ok ? (regra || n === 1 ? "Cabe" : "Cabe (acima da regra)") : "Não cabe"}</td><td class="${sobra < 0 ? "neg" : ""}">${R(sobra)}</td></tr>`;
+    }
+    $("cabeTbl").innerHTML = rows;
+    const parcV = (n) => (val ? val / n : 0);
+    $("cabeMeses").innerHTML = `<tr><th>Compras de</th>${ms.map((m) => `<th>${lab(m)}</th>`).join("")}</tr>` +
+      `<tr><td class="muted">Paga na fatura de</td>${ms.map((m) => `<td>${fat(m)}</td>`).join("")}</tr>` +
+      `<tr><td>Espaço livre no ${card}</td>${ms.map((m) => `<td><b>${R(room[m])}</b></td>`).join("")}</tr>`;
+  }
   function renderFormas(k) {
     const f = formas(k), p = DATA.plano[k] || {}, card = DATA.cartoes[0] || "Inter";
     const salPaga = lab(addM(k, 1)), mesL = lab(k);
@@ -424,7 +450,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
+    renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
       ["Fora do Inter disponível", R(p.fora), "13º livre + férias (Pix/débito)"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
