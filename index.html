@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=18">
 </head>
 <body class="travado">
 <header class="top">
@@ -74,14 +74,14 @@
 
     <section class="hero card">
       <div class="hero-main">
-        <p class="eyebrow">Ainda posso gastar em <span id="hMes"></span> <span class="muted small">(cartão + Pix/débito)</span> <span id="hTag"></span></p>
+        <p class="eyebrow">Posso gastar em <span id="hMes"></span> <span class="muted small">(no débito/Pix, dinheiro da conta)</span> <span id="hTag"></span></p>
         <p class="big" id="hRestante">—</p>
         <div class="bar" role="progressbar" aria-label="Uso do teto"><span id="hBar"></span></div>
         <div class="como" id="hComo"></div>
         <p class="muted" id="hResumo"></p>
       </div>
       <div class="hero-side">
-        <label for="gastoManual" class="muted">Já gastei neste mês (cartão + Pix/débito)</label>
+        <label for="gastoManual" class="muted">Já usei do dinheiro deste mês (fatura + débito/Pix)</label>
         <input id="gastoManual" type="number" step="0.01" min="0" placeholder="vazio = aba Lançamentos">
         <p class="muted small">Fica salvo só neste navegador.</p>
       </div>

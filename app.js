@@ -242,7 +242,7 @@
     $("fAtivos").textContent = t.join(" · ");
   }
   $("cabeValor").addEventListener("input", () => renderCabe(F.mes));
-  $("gastoManual").addEventListener("input", (e) => { try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + F.mes) : localStorage.setItem("gasto-" + F.mes, v); } catch (_) {} renderGeral(true); });
+  $("gastoManual").addEventListener("input", (e) => { const kk = addM(F.mes, -1); try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + kk) : localStorage.setItem("gasto-" + kk, v); } catch (_) {} renderGeral(true); });
 
   // ---------- cálculos ----------
   const idx = (k) => DATA.meses.indexOf(k);
@@ -361,7 +361,8 @@
       <div class="it"><div class="l">Mês vigente</div><div class="v">${labL(cm)}</div><div class="muted small">salário em uso: ${labL(REF.mes)}</div></div>
       <div class="it"><div class="l">Saldo em conta</div><div class="v">${R(DATA.saldo)}</div></div>
       <div class="it"><div class="l">Próximo 5º dia útil (salário)</div><div class="v">${fmtD(REF.proximo)}</div><div class="muted small">${dias === 0 ? "hoje" : "em " + dias + " dia" + (dias > 1 ? "s" : "")}</div></div>
-      <div class="it"><div class="l">Ainda posso gastar em ${lab(cm)}</div><div class="v ${fc.ainda < 0 ? "neg" : ""}">${R(fechado ? 0 : fc.ainda)}</div><div class="muted small">${fechado ? "mês fechado" : "crédito até " + R(Math.max(0, fc.ainda)) + " (fatura de " + lab(addM(cm, 1)) + ") · débito/Pix até " + R(debitoDisp(cm, fc.ainda).deb) + " · mesmo teto de " + R(fc.teto) + (fc.fora ? " · +" + R(fc.fora) + " do 13º/férias" : "") + (antesCorte ? " · no " + esc(card) + ", até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) : "")}</div></div>
+      ${(() => { const pk = addM(cm, -1), pd = DATA.plano[pk] || {}, d = Math.max(0, (pd.teto || 0) - gastoInter(pk).v), c = Math.max(0, (pc.teto || 0) - gastoInter(cm).v);
+        return `<div class="it"><div class="l">Posso gastar em ${lab(cm)} (débito/Pix)</div><div class="v ${d <= 0 ? "neg" : ""}">${R(d)}</div><div class="muted small">${pc.fora ? "+ " + R(pc.fora) + " do 13º quando cair · " : ""}cartão só parcelado: ${R(c)} livres no dinheiro de ${lab(addM(cm, 1))}</div></div>`; })()}
       ${(() => { const pd = contasMes(cm).filter((c) => !c.pago); return `<div class="it"><div class="l">Contas a pagar em ${lab(cm)}</div><div class="v ${pd.length ? "neg" : ""}">${R(pd.reduce((s, c) => s + c.valor, 0))}</div><div class="muted small">${pd.length ? pd.map((c) => esc(c.nome.replace(/^Fatura /, ""))).join(", ") : "tudo pago"}</div></div>`; })()}
       <div class="it"><div class="l">${lab(cm)}: teto / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
   }
@@ -377,28 +378,29 @@
   }
   // Quanto cabe numa compra no cartão: cada parcela ocupa o espaço de um mês de compras (k, k+1, ...)
   function renderCabe(k) {
-    const box = $("cabeCard"), p0 = DATA.plano[k] || {};
-    if (!p0.teto) { box.hidden = true; return; } box.hidden = false;
-    const ms = [], room = {};
-    for (let j = 0; j < 6; j++) { const m = addM(k, j), p = DATA.plano[m]; if (!p || !p.teto) break; ms.push(m);
-      room[m] = Math.max(0, (p.teto || 0) - (j === 0 ? gastoInter(m).v : p.ja || 0)); }
-    const val = parseFloat($("cabeValor").value) || 0, card = esc(DATA.cartoes[0] || "Inter");
-    const fat = (m) => lab(addM(m, 1));
-    $("cabeInfo").innerHTML = `Vale para cartão, Pix ou débito. Cada parcela ocupa o teto de um mês (o que sobra já desconta as parcelas de compras que você já fez); a compra cabe se nenhum mês estoura. ` +
-      `No cartão, comprando hoje a 1ª parcela cai na fatura de ${fat(k)}.`;
-    let rows = `<tr><th>Vezes</th><th>Compra máxima</th><th>Parcela máx.</th>${val ? "<th>Sua compra</th><th>Cabe?</th><th>Sobra no mês mais apertado</th>" : "<th>Mês que limita</th>"}</tr>`;
-    for (let n = 1; n <= ms.length; n++) {
-      const sub = ms.slice(0, n), lim = sub.reduce((a, m) => (room[m] < room[a] ? m : a), sub[0]), pmax = room[lim], max = pmax * n;
-      if (!val) { rows += `<tr><td>${n === 1 ? "À vista" : n + "x"}</td><td class="big3">${R(max)}</td><td>${R(pmax)}</td><td class="muted">${lab(lim)} (fatura ${fat(lim)})</td></tr>`; continue; }
-      const parc = val / n, sobra = Math.min(...sub.map((m) => room[m] - parc)), ok = sobra >= -0.005;
-      rows += `<tr class="${ok ? "ok" : "no"}"><td>${n === 1 ? "À vista" : n + "x"}</td><td>${R(max)}</td><td>${R(pmax)}</td><td class="big3">${n === 1 ? R(val) : n + " × " + R(parc)}</td>` +
+    // linhas do plano = dinheiro de um salário: débito em k usa a linha k-1; parcela n no cartão usa a linha k+n-1
+    const box = $("cabeCard"), card = esc(DATA.cartoes[0] || "Inter");
+    const room = (m) => { const p = DATA.plano[m]; return p && p.teto ? Math.max(0, p.teto - gastoInter(m).v) : 0; };
+    const sal = (m) => lab(addM(m, 1));
+    const ms = []; for (let j = 0; j < 6; j++) { const m = addM(k, j); if (!DATA.plano[m] || !DATA.plano[m].teto) break; ms.push(m); }
+    if (!ms.length) { box.hidden = true; return; } box.hidden = false;
+    const val = parseFloat($("cabeValor").value) || 0, debRoom = room(addM(k, -1));
+    $("cabeInfo").innerHTML = `Prefira o débito/Pix. No cartão, use só parcelado: cada parcela cai numa fatura e usa o dinheiro daquele salário (já descontando o que você já comprou). A compra cabe se nenhum mês estoura.`;
+    const opts = [{ nome: "À vista no débito/Pix", n: 1, ms: [addM(k, -1)], deb: true }].concat(ms.map((_, j) => ({ nome: j === 0 ? "À vista no cartão (evite)" : (j + 1) + "x no cartão", n: j + 1, ms: ms.slice(0, j + 1) })));
+    let rows = `<tr><th>Forma</th><th>Compra máxima</th><th>Parcela máx.</th>${val ? "<th>Sua compra</th><th>Cabe?</th><th>Sobra no mês mais apertado</th>" : "<th>Mês que limita</th>"}</tr>`;
+    opts.forEach((o) => {
+      const lim = o.ms.reduce((a, m) => (room(m) < room(a) ? m : a), o.ms[0]), pmax = room(lim), max = pmax * o.n;
+      const cls = o.deb ? "pref" : o.n === 1 ? "evite" : "";
+      if (!val) { rows += `<tr class="${cls}"><td>${o.nome}</td><td class="big3">${R(max)}</td><td>${R(pmax)}</td><td class="muted">dinheiro de ${sal(lim)}</td></tr>`; return; }
+      const parc = val / o.n, sobra = Math.min(...o.ms.map((m) => room(m) - parc)), ok = sobra >= -0.005;
+      rows += `<tr class="${ok ? "ok" : "no"} ${cls}"><td>${o.nome}</td><td>${R(max)}</td><td>${R(pmax)}</td><td class="big3">${o.n === 1 ? R(val) : o.n + " × " + R(parc)}</td>` +
         `<td class="${ok ? "pos" : "neg"}">${ok ? "Cabe" : "Não cabe"}</td><td class="${sobra < 0 ? "neg" : ""}">${R(sobra)}</td></tr>`;
-    }
+    });
     $("cabeTbl").innerHTML = rows;
-    const parcV = (n) => (val ? val / n : 0);
-    $("cabeMeses").innerHTML = `<tr><th>Compras de</th>${ms.map((m) => `<th>${lab(m)}</th>`).join("")}</tr>` +
-      `<tr><td class="muted">No cartão, cai na fatura de</td>${ms.map((m) => `<td>${fat(m)}</td>`).join("")}</tr>` +
-      `<tr><td>Ainda posso gastar</td>${ms.map((m) => `<td><b>${R(room[m])}</b></td>`).join("")}</tr>`;
+    const all = [addM(k, -1)].concat(ms);
+    $("cabeMeses").innerHTML = `<tr><th>Dinheiro do salário de</th>${all.map((m) => `<th>${sal(m)}</th>`).join("")}</tr>` +
+      `<tr><td class="muted">Paga</td>${all.map((m, j) => `<td>${j === 0 ? "débito de " + lab(k) : "fatura de " + sal(m)}</td>`).join("")}</tr>` +
+      `<tr><td>Ainda livre</td>${all.map((m) => `<td><b>${R(room(m))}</b></td>`).join("")}</tr>`;
   }
   function renderFormas() { const el = $("formas"); if (el) { el.innerHTML = ""; el.hidden = true; } }
 
@@ -408,34 +410,38 @@
     const real = DATA.tipo[i] === "Realizado";
     $("hTag").innerHTML = real ? '<span class="tag">realizado</span>' : '<span class="tag prev">previsto</span>';
     $("hMes").textContent = lab(k);
-    const fechado = !p.teto && k < DATA.planIni;
-    const gi = gastoInter(k), teto = p.teto || 0, rest = fechado ? DATA.saldo : teto - gi.v, sem = semanasRestantes(k);
-    $("hRestante").textContent = R(rest); $("hRestante").classList.toggle("neg", rest < 0);
-    const uso = teto ? gi.v / teto : 0; $("hBar").style.width = (fechado ? 0 : Math.min(100, uso * 100)) + "%"; $("hBar").classList.toggle("over", uso > 1);
-    $("hResumo").innerHTML = fechado
-      ? `Mês fechado: tudo já foi pago e a renda está zerada (saldo em conta ${R(DATA.saldo)}). O teto volta no 5º dia útil (${fmtD(REF.proximo)}): ${lab(addM(k, 1))} começa com ${R((DATA.plano[addM(k, 1)] || {}).teto)}.`
-      : `<b>Teto do mês: ${R(teto)}</b> para tudo — cartão, Pix ou débito, à vista ou parcelado (já separa a meta de reserva de ${R(p.meta)}).<br>` +
-        `Já gasto ${R(gi.v)} (${P(uso)} do teto, ${gi.fonte})${gi.fonte.startsWith("aba") ? `: cartão ${R(p.jaCartao)} · Pix/débito ${R(p.jaPix)}` : ""}<br>` +
-        (sem > 0 ? `Dá ${R(rest / sem)} por semana nas ${sem.toFixed(1).replace(".", ",")} semanas que faltam. ` : "") +
-        (p.fora ? `<b>Extra de ${R(p.fora)}</b> do 13º/férias livres neste mês (entra quando o dinheiro cair). ` : "") +
-        `O que não gastar vai para a reserva.`;
-    { // crédito x débito: mesmo teto, momentos diferentes
-      const el = $("hComo"), card = DATA.cartoes[0] || "Inter", fch = DATA.fechamento, hj = new Date();
-      if (fechado || !teto) { el.innerHTML = ""; el.hidden = true; }
-      else {
-        el.hidden = false;
-        const prev = DATA.plano[addM(k, -1)] || {}, fatK = addM(k, 1), vc = DATA.venc[card];
-        const { sobraSal, deb } = debitoDisp(k, rest), cred = Math.max(0, rest);
-        const antes = mesAtual() === k && fch && hj.getDate() <= fch;
-        el.innerHTML = `
-          <div class="op"><div class="t">💳 No crédito (${esc(card)})</div><div class="v">${R(cred)}</div>
-            <div class="q">Entra na <b>fatura de ${lab(fatK)}</b>${vc ? " (vence " + String(vc).padStart(2, "0") + "/" + fatK.slice(5) + ")" : ""} e é paga com o <b>salário de ${lab(fatK)}</b>. Não mexe no dinheiro da conta agora.${antes ? ` <span class="icon-warn">Até dia ${fch} a compra ainda cai na fatura de ${lab(k)}: espere o dia ${fch + 1}.</span>` : ""}</div></div>
-          <div class="op deb"><div class="t">🏦 No débito / Pix</div><div class="v ${deb <= 0 ? "neg" : ""}">${R(deb)}</div>
-            <div class="q">Sai <b>da conta agora</b>, do que sobrou do <b>salário de ${lab(k)}</b> depois das contas e da fatura deste mês${sobraSal < rest ? ` (sobra prevista: ${R(sobraSal)})` : ""}.${deb <= 0 ? " <b>Neste mês, prefira o crédito.</b>" : ""}${p.fora ? ` + <b>${R(p.fora)}</b> do 13º/férias quando o dinheiro cair.` : ""}</div></div>
-          <p class="nota">É o mesmo teto: o que você gastar em um lado diminui o outro.</p>`;
-      }
+    // dinheiro do mês = salário de k (linha k-1 do plano): paga a fatura de k e o débito/Pix de k
+    const pk = addM(k, -1), pd = DATA.plano[pk] || {}, sem = semanasRestantes(k);
+    const fechado = !(DATA.plano[k] || {}).teto && k < DATA.planIni;
+    const gi = gastoInter(pk), teto = pd.teto || 0, rest = teto - gi.v, deb = Math.max(0, rest);
+    const card = DATA.cartoes[0] || "Inter", fch = DATA.fechamento, hj = new Date(), fatK = addM(k, 1), vc = DATA.venc[card];
+    const credAinda = (p.teto || 0) - gastoInter(k).v;
+    const antes = mesAtual() === k && fch && hj.getDate() <= fch;
+    $("hRestante").textContent = R(deb); $("hRestante").classList.toggle("neg", deb <= 0);
+    const uso = teto ? gi.v / teto : 1; $("hBar").style.width = Math.min(100, uso * 100) + "%"; $("hBar").classList.toggle("over", uso > 1);
+    $("hBar").parentElement.hidden = false;
+    $("hResumo").innerHTML = (teto
+      ? `<b>Dinheiro de ${lab(k)}: ${R(teto)}</b> (o que o salário de ${lab(k)} pode pagar depois das contas, já separando a meta de reserva).<br>` +
+        `Já usado ${R(gi.v)}: fatura de ${lab(k)} com compras do plano ${R(pd.jaCartao)} · débito/Pix em ${lab(k)} ${R(pd.jaPix)}.<br>` +
+        (deb > 0 && sem > 0 ? `Dá ${R(deb / sem)} por semana nas ${sem.toFixed(1).replace(".", ",")} semanas que faltam. ` : "")
+      : `O salário de ${lab(k)} já foi todo para as contas e a fatura (sobra prevista ${R(pd.reserva || 0)}). Neste mês, não há dinheiro livre para o débito. `) +
+      `O que não gastar vai para a reserva.`;
+    {
+      const el = $("hComo"); el.hidden = false; $("hBar").parentElement.hidden = true;
+      const pkC = DATA.plano[k] || {}, tetoC = pkC.teto || 0, usoC = gastoInter(k).v;
+      const barra = (cls, titulo, livre, tot, usado, nota) => `
+        <div class="bx ${cls}"><div class="bx-h"><span>${titulo}</span><b>${R(Math.max(0, livre))}</b></div>
+          <div class="bx-bar"><span style="width:${tot ? Math.min(100, (usado / tot) * 100) : 100}%"></span></div>
+          <div class="bx-n">${nota}</div></div>`;
+      el.innerHTML =
+        barra("deb", `💵 Débito/Pix em ${lab(k)}`, deb, teto, Math.min(gi.v, teto || gi.v),
+          teto ? `livre de ${R(teto)} do salário de ${lab(k)} · já usado ${R(gi.v)} (fatura ${R(pd.jaCartao)} + débito ${R(pd.jaPix)}). <b>Gaste primeiro aqui.</b>` : `o salário de ${lab(k)} já foi todo para as contas e a fatura.`) +
+        (p.fora ? `<div class="bx-x">+ <b>${R(p.fora)}</b> do 13º/férias para o débito quando o dinheiro cair</div>` : "") +
+        barra("cred", `💳 Cartão agora (cai na fatura de ${lab(fatK)})`, credAinda, tetoC, Math.min(usoC, tetoC || usoC),
+          (antes ? `<span class="icon-warn">Até dia ${fch} a compra ainda cai na fatura de ${lab(k)} (usa a barra de cima).</span> ` : "") +
+          `livre de ${R(tetoC)} do salário de ${lab(fatK)} · já comprometido ${R(usoC)}. Só parcelado ou assinatura: o que usar aqui sai do débito de ${lab(fatK)}.`);
     }
-    let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
+    let man = null; try { man = localStorage.getItem("gasto-" + addM(k, -1)); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
     renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
@@ -779,7 +785,7 @@
     const meu = parcela * (1 - Math.min(100, Math.max(0, +it.pct || 0)) / 100);
     for (let i = 0; i < n; i++) {
       if (it.t === "div") out.push({ row: addM(it.mes, i - 1), pag: addM(it.mes, i), valor: parcela, meu, div: true });
-      else out.push({ row: addM(it.mes, i), pag: pix ? addM(it.mes, i) : addM(it.mes, i + 1), valor: parcela, meu, div: false });
+      else out.push({ row: pix ? addM(it.mes, i - 1) : addM(it.mes, i), pag: pix ? addM(it.mes, i) : addM(it.mes, i + 1), valor: parcela, meu, div: false });
     }
     return { n, parcela, meu, lista: out };
   }
@@ -848,7 +854,7 @@
       const ini = c.lista[0].pag, fim = c.lista[c.lista.length - 1].pag;
       const r0 = c.lista[0].row, r1 = c.lista[c.lista.length - 1].row;
       if (el) el.innerHTML = (it.t === "div" ? `${c.n}x de ${R(c.parcela)} (total ${R(c.parcela * c.n)}) · pago com o salário de ${lab(ini)}${c.n > 1 ? " até " + lab(fim) : ""}`
-        : (c.n > 1 ? `${c.n}x de ${R(c.parcela)}` : `${R(c.parcela)} à vista`) + ` no ${esc(it.cartao)} · ocupa o teto de ${lab(r0)}${c.n > 1 ? " até " + lab(r1) : ""}`) +
+        : (c.n > 1 ? `${c.n}x de ${R(c.parcela)}` : `${R(c.parcela)} à vista`) + ` no ${esc(it.cartao)} · usa o dinheiro do salário de ${lab(addM(r0, 1))}${c.n > 1 ? " até " + lab(addM(r1, 1)) : ""}`) +
         (it.pct ? ` · meu custo ${R(c.meu)}/mês (${esc(it.pct)}% volta pra mim)` : "");
       const p = DATA.plano[it.mes] || {};
       if (it.t !== "div" && it.cartao !== card0 && it.cartao !== PIX) av.push(`<span class="icon-warn">${nome}: a combinação era parar de usar ${esc(it.cartao)} e concentrar no ${esc(card0)}.</span>`);
@@ -896,8 +902,8 @@
       baseOpts(false, (v) => R0(v), {}));
     const cr = charts.cSimRes; cr.options.plugins.datalabels.display = (c) => c.datasetIndex === 1 && (c.dataIndex === vis.length - 1 || c.dataIndex % 3 === 0); cr.update();
     // tabela
-    $("tSim").innerHTML = `<tr><th>Mês das compras</th><th>Nova parcela</th><th>Entrada comprometida</th><th>Ainda posso gastar</th><th>Vai para a reserva</th><th>Reserva acumulada</th><th>Sobra do salário seguinte</th></tr>` +
-      vis.map((l) => `<tr class="${l.nova > 0 ? "" : "fora"}"><td>${lab(l.k)}</td><td>${l.nova ? R(l.nova) : "—"}</td><td>${l.compA == null ? "—" : ab(l.compA, l.compD, P)}</td>
+    $("tSim").innerHTML = `<tr><th>Dinheiro do salário de</th><th>Nova parcela</th><th>Entrada comprometida</th><th>Ainda posso gastar</th><th>Vai para a reserva</th><th>Reserva acumulada</th><th>Sobra do salário seguinte</th></tr>` +
+      vis.map((l) => `<tr class="${l.nova > 0 ? "" : "fora"}"><td>${lab(l.F)}</td><td>${l.nova ? R(l.nova) : "—"}</td><td>${l.compA == null ? "—" : ab(l.compA, l.compD, P)}</td>
         <td class="${l.tetoD < 0 ? "neg" : ""}">${ab(l.tetoA, l.tetoD)}</td><td class="${l.resD < 0 ? "neg" : ""}">${ab(l.resA, l.resD)}</td><td class="${l.accD < 0 ? "neg" : ""}">${ab(l.accA, l.accD)}</td><td class="${l.sobraD != null && l.sobraD < 0 ? "neg" : ""}">${l.sobraA == null ? "—" : ab(l.sobraA, l.sobraD)}</td></tr>`).join("");
   }
   function renderSim() { if (!SIM) SIM = simLoad(); renderSimEditor(); renderSimResultado(); }
