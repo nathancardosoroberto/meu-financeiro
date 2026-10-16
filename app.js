@@ -84,7 +84,7 @@
     // Plano de Gastos
     const pl = rows(wb, PG);
     const ph = findRow(pl, (t) => t === "Mês das compras");
-    const K = ["mes","fatura","espaco","teto","semana","vista","parc","vezes","parcMax","simult","fora","vr","total","faturaInter","limite","reserva","reservaAc","ja","ainda","meta","livre","livreResta","reservaRend","foraRes"];
+    const K = ["mes","fatura","espaco","teto","semana","jaCartao","jaPix","ja","ainda","fora","vr","total","faturaInter","limite","reserva","reservaAc","meta","livre","livreResta","reservaRend","foraRes"];
     D.plano = {};
     for (let i = ph + 1; i < pl.length; i++) {
       const r = pl[i]; if (!r || txt(r[0]).startsWith("TOTAL")) break; const k = ym(r[0]); if (!k) continue;
@@ -361,24 +361,19 @@
       <div class="it"><div class="l">Mês vigente</div><div class="v">${labL(cm)}</div><div class="muted small">salário em uso: ${labL(REF.mes)}</div></div>
       <div class="it"><div class="l">Saldo em conta</div><div class="v">${R(DATA.saldo)}</div></div>
       <div class="it"><div class="l">Próximo 5º dia útil (salário)</div><div class="v">${fmtD(REF.proximo)}</div><div class="muted small">${dias === 0 ? "hoje" : "em " + dias + " dia" + (dias > 1 ? "s" : "")}</div></div>
-      <div class="it"><div class="l">Crédito do ${esc(card)} em ${lab(cm)}</div><div class="v">${R(fechado ? 0 : fc.credSug)}</div><div class="muted small">${fechado ? "mês fechado" : antesCorte ? "sugerido · até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) + ", que já está no limite: espere o dia " + (fch + 1) : "sugerido (cai na fatura de " + lab(addM(cm, 1)) + ")"}</div></div>
-      <div class="it"><div class="l">Em dinheiro (Pix/débito)</div><div class="v">${R(fechado ? DATA.saldo : fc.cashSug)}</div><div class="muted small">${fechado ? "saldo em conta" : fc.cashSug <= 0 ? "a conta de " + lab(cm) + " fecha negativa: evite" : "sem mexer na reserva · máx. " + R(fc.cashMax)}</div></div>
+      <div class="it"><div class="l">Ainda posso gastar em ${lab(cm)}</div><div class="v ${fc.ainda < 0 ? "neg" : ""}">${R(fechado ? 0 : fc.ainda)}</div><div class="muted small">${fechado ? "mês fechado" : "crédito até " + R(Math.max(0, fc.ainda)) + " (fatura de " + lab(addM(cm, 1)) + ") · débito/Pix até " + R(debitoDisp(cm, fc.ainda).deb) + " · mesmo teto de " + R(fc.teto) + (fc.fora ? " · +" + R(fc.fora) + " do 13º/férias" : "") + (antesCorte ? " · no " + esc(card) + ", até dia " + fch + " a compra ainda cai na fatura de " + lab(cm) : "")}</div></div>
       ${(() => { const pd = contasMes(cm).filter((c) => !c.pago); return `<div class="it"><div class="l">Contas a pagar em ${lab(cm)}</div><div class="v ${pd.length ? "neg" : ""}">${R(pd.reduce((s, c) => s + c.valor, 0))}</div><div class="muted small">${pd.length ? pd.map((c) => esc(c.nome.replace(/^Fatura /, ""))).join(", ") : "tudo pago"}</div></div>`; })()}
-      <div class="it"><div class="l">${lab(cm)}: sugerido / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
+      <div class="it"><div class="l">${lab(cm)}: teto / livre</div><div class="v">${R0(pc.teto)} / ${R0(pc.livre)}</div><div class="muted small">o que não gastar vai para a reserva</div></div>`;
   }
 
-  function formas(k) {
+  function debitoDisp(k, rest) {
     const p = DATA.plano[k] || {}, prev = DATA.plano[addM(k, -1)] || {};
-    const ja = gastoInter(k).v, fechado = !p.teto && k < DATA.planIni;
-    const cashJa = DATA.lanc.filter((l) => l.data.slice(0, 7) === k && !DATA.cartoes.includes(l.paga) && l.paga !== "VR").reduce((s, l) => s + l.total, 0);
-    const sobraMes = prev.reserva != null ? prev.reserva : 0; // o que sobra na conta neste mês depois de pagar contas e faturas
-    return {
-      fechado, ja, cashJa, sobraMes,
-      credSug: fechado ? 0 : (p.teto || 0) - ja, credMax: fechado ? 0 : (p.espaco || 0) - ja,
-      cashSug: Math.max(0, (p.fora || 0) + (sobraMes < 0 ? sobraMes : Math.max(0, sobraMes - (prev.meta || 0))) - cashJa),
-      cashMax: Math.max(0, (p.fora || 0) + (p.foraRes || 0) + sobraMes - cashJa),
-      foraRes: p.foraRes || 0, fora: p.fora || 0, vr: p.vr || 0, fatura: p.fatura, meta: prev.meta || 0,
-    };
+    const sobraSal = (prev.espaco || 0) - (p.jaPix || 0) - (k > DATA.planIni ? prev.jaCartao || 0 : 0);
+    return { sobraSal, deb: Math.max(0, Math.min(rest, sobraSal)) };
+  }
+  function formas(k) {
+    const p = DATA.plano[k] || {}, ja = gastoInter(k).v, fechado = !p.teto && k < DATA.planIni;
+    return { fechado, ja, teto: p.teto || 0, ainda: fechado ? 0 : (p.teto || 0) - ja, fora: p.fora || 0, vr: p.vr || 0, jaCartao: p.jaCartao || 0, jaPix: p.jaPix || 0 };
   }
   // Quanto cabe numa compra no cartão: cada parcela ocupa o espaço de um mês de compras (k, k+1, ...)
   function renderCabe(k) {
@@ -389,48 +384,23 @@
       room[m] = Math.max(0, (p.teto || 0) - (j === 0 ? gastoInter(m).v : p.ja || 0)); }
     const val = parseFloat($("cabeValor").value) || 0, card = esc(DATA.cartoes[0] || "Inter");
     const fat = (m) => lab(addM(m, 1));
-    $("cabeInfo").innerHTML = `Comprando hoje, a 1ª parcela cai na fatura de ${fat(k)}. Cada parcela usa o espaço de um mês; a compra cabe se nenhum mês estoura. ` +
-      `Regra do plano para parcelas novas: até ${R(p0.parc)}/mês em até ${p0.vezes || "—"}x — acima disso cabe, mas aperta.`;
+    $("cabeInfo").innerHTML = `Vale para cartão, Pix ou débito. Cada parcela ocupa o teto de um mês (o que sobra já desconta as parcelas de compras que você já fez); a compra cabe se nenhum mês estoura. ` +
+      `No cartão, comprando hoje a 1ª parcela cai na fatura de ${fat(k)}.`;
     let rows = `<tr><th>Vezes</th><th>Compra máxima</th><th>Parcela máx.</th>${val ? "<th>Sua compra</th><th>Cabe?</th><th>Sobra no mês mais apertado</th>" : "<th>Mês que limita</th>"}</tr>`;
     for (let n = 1; n <= ms.length; n++) {
       const sub = ms.slice(0, n), lim = sub.reduce((a, m) => (room[m] < room[a] ? m : a), sub[0]), pmax = room[lim], max = pmax * n;
       if (!val) { rows += `<tr><td>${n === 1 ? "À vista" : n + "x"}</td><td class="big3">${R(max)}</td><td>${R(pmax)}</td><td class="muted">${lab(lim)} (fatura ${fat(lim)})</td></tr>`; continue; }
-      const parc = val / n, sobra = Math.min(...sub.map((m) => room[m] - parc)), ok = sobra >= -0.005, regra = n <= (p0.vezes || 0) && parc <= (p0.parc || 0) + 0.005;
+      const parc = val / n, sobra = Math.min(...sub.map((m) => room[m] - parc)), ok = sobra >= -0.005;
       rows += `<tr class="${ok ? "ok" : "no"}"><td>${n === 1 ? "À vista" : n + "x"}</td><td>${R(max)}</td><td>${R(pmax)}</td><td class="big3">${n === 1 ? R(val) : n + " × " + R(parc)}</td>` +
-        `<td class="${ok ? "pos" : "neg"}">${ok ? (regra || n === 1 ? "Cabe" : "Cabe (acima da regra)") : "Não cabe"}</td><td class="${sobra < 0 ? "neg" : ""}">${R(sobra)}</td></tr>`;
+        `<td class="${ok ? "pos" : "neg"}">${ok ? "Cabe" : "Não cabe"}</td><td class="${sobra < 0 ? "neg" : ""}">${R(sobra)}</td></tr>`;
     }
     $("cabeTbl").innerHTML = rows;
     const parcV = (n) => (val ? val / n : 0);
     $("cabeMeses").innerHTML = `<tr><th>Compras de</th>${ms.map((m) => `<th>${lab(m)}</th>`).join("")}</tr>` +
-      `<tr><td class="muted">Paga na fatura de</td>${ms.map((m) => `<td>${fat(m)}</td>`).join("")}</tr>` +
-      `<tr><td>Espaço livre no ${card}</td>${ms.map((m) => `<td><b>${R(room[m])}</b></td>`).join("")}</tr>`;
+      `<tr><td class="muted">No cartão, cai na fatura de</td>${ms.map((m) => `<td>${fat(m)}</td>`).join("")}</tr>` +
+      `<tr><td>Ainda posso gastar</td>${ms.map((m) => `<td><b>${R(room[m])}</b></td>`).join("")}</tr>`;
   }
-  function renderFormas(k) {
-    const f = formas(k), p = DATA.plano[k] || {}, card = DATA.cartoes[0] || "Inter";
-    const salPaga = lab(addM(k, 1)), mesL = lab(k);
-    const cred = `<div class="card forma">
-      <h2>No crédito do ${esc(card)}</h2>
-      <p class="quando">Compras de ${mesL} caem na fatura de ${salPaga} e são pagas com o salário de ${salPaga} (5º dia útil). ${DATA.fechamento ? "Compre até o dia " + DATA.fechamento + " para cair nessa fatura." : "Atenção ao dia de fechamento: depois dele a compra vai para a fatura seguinte."}</p>
-      <div class="muted small">Sugerido (já separa os ${P(DATA.pct)} da reserva)</div>
-      <div class="big2 ${f.credSug < 0 ? "neg" : ""}">${R(f.credSug)}</div>
-      <div class="linha"><span>Máximo sem estourar o mês de ${salPaga}</span><b>${R(f.credMax)}</b></div>
-      <div class="linha"><span>À vista / parcelas novas</span><b>${R(p.vista)} / ${R(p.parc)} por mês (até ${p.vezes || "—"}x)</b></div>
-      <div class="linha"><span>Já lançado no ${esc(card)} neste mês</span><b>${R(f.ja)}</b></div></div>`;
-    const cash = `<div class="card forma cash">
-      <h2>Em dinheiro (Pix / débito)</h2>
-      <p class="quando">Sai da conta na hora, então usa o que sobrou do salário de ${mesL} depois das contas e faturas de ${mesL}${f.fora ? ", mais o 13º livre/férias que entram neste mês" : ""}.</p>
-      <div class="muted small">Sem mexer na reserva</div>
-      <div class="big2">${R(f.cashSug)}</div>
-      <div class="linha"><span><b>Usando a reserva do mês</b> (máximo)</span><b>${R(f.cashMax)}</b></div>
-      <div class="linha"><span>Sobra do salário depois de pagar tudo</span><b class="${f.sobraMes < 0 ? "neg" : ""}">${R(f.sobraMes)}</b></div>
-      ${f.fora ? `<div class="linha"><span>13º / férias livres</span><b>${R(f.fora)}</b></div>` : ""}
-      ${f.foraRes ? `<div class="linha"><span>13º / férias separados para a reserva</span><b>${R(f.foraRes)}</b></div>` : ""}
-      ${f.cashJa ? `<div class="linha"><span>Já gasto em Pix/débito neste mês</span><b>${R(f.cashJa)}</b></div>` : ""}
-      <div class="linha"><span>VR / Flash (supermercado, à parte)</span><b>${R(f.vr)}</b></div>
-      ${f.sobraMes < 0 ? (f.fora ? `<p class="muted small">O salário fecha em ${R(f.sobraMes)}; esse buraco já foi descontado do 13º/férias livres.</p>` : `<p class="icon-bad">A conta fecha negativa em ${R(f.sobraMes)} neste mês: não use Pix/débito e cubra a diferença com a reserva.</p>`) : ""}
-      ${f.cashMax > f.cashSug ? `<p class="muted small">Gastar acima de ${R(f.cashSug)} tira dinheiro da reserva.</p>` : ""}</div>`;
-    $("formas").innerHTML = cred + cash;
-  }
+  function renderFormas() { const el = $("formas"); if (el) { el.innerHTML = ""; el.hidden = true; } }
 
   function renderGeral(onlyHero) {
     renderHoje();
@@ -444,15 +414,33 @@
     const uso = teto ? gi.v / teto : 0; $("hBar").style.width = (fechado ? 0 : Math.min(100, uso * 100)) + "%"; $("hBar").classList.toggle("over", uso > 1);
     $("hResumo").innerHTML = fechado
       ? `Mês fechado: tudo já foi pago e a renda está zerada (saldo em conta ${R(DATA.saldo)}). O teto volta no 5º dia útil (${fmtD(REF.proximo)}): ${lab(addM(k, 1))} começa com ${R((DATA.plano[addM(k, 1)] || {}).teto)}.`
-      : `<b>Livre no mês: ${R(p.livre)}</b> (inclui a meta de reserva de ${R(p.meta)}, ${P(DATA.pct)} do salário líquido). Ainda livre: ${R((p.livre || 0) - gi.v)} — o que você não gastar vai para a reserva.<br>` +
-        `Sugerido ${R(teto)} (livre − meta) · já gasto ${R(gi.v)} (${P(uso)} do sugerido, ${gi.fonte})<br>` + (sem > 0 ? `Dá ${R(rest / sem)} por semana nas ${sem.toFixed(1).replace(".", ",")} semanas que faltam · ` : "") +
-        `à vista até ${R(p.vista)} · parcelas novas até ${R(p.parc)}/mês em até ${p.vezes || "—"}x (máx. ${p.simult || "—"} ao mesmo tempo)`;
+      : `<b>Teto do mês: ${R(teto)}</b> para tudo — cartão, Pix ou débito, à vista ou parcelado (já separa a meta de reserva de ${R(p.meta)}).<br>` +
+        `Já gasto ${R(gi.v)} (${P(uso)} do teto, ${gi.fonte})${gi.fonte.startsWith("aba") ? `: cartão ${R(p.jaCartao)} · Pix/débito ${R(p.jaPix)}` : ""}<br>` +
+        (sem > 0 ? `Dá ${R(rest / sem)} por semana nas ${sem.toFixed(1).replace(".", ",")} semanas que faltam. ` : "") +
+        (p.fora ? `<b>Extra de ${R(p.fora)}</b> do 13º/férias livres neste mês (entra quando o dinheiro cair). ` : "") +
+        `O que não gastar vai para a reserva.`;
+    { // crédito x débito: mesmo teto, momentos diferentes
+      const el = $("hComo"), card = DATA.cartoes[0] || "Inter", fch = DATA.fechamento, hj = new Date();
+      if (fechado || !teto) { el.innerHTML = ""; el.hidden = true; }
+      else {
+        el.hidden = false;
+        const prev = DATA.plano[addM(k, -1)] || {}, fatK = addM(k, 1), vc = DATA.venc[card];
+        const { sobraSal, deb } = debitoDisp(k, rest), cred = Math.max(0, rest);
+        const antes = mesAtual() === k && fch && hj.getDate() <= fch;
+        el.innerHTML = `
+          <div class="op"><div class="t">💳 No crédito (${esc(card)})</div><div class="v">${R(cred)}</div>
+            <div class="q">Entra na <b>fatura de ${lab(fatK)}</b>${vc ? " (vence " + String(vc).padStart(2, "0") + "/" + fatK.slice(5) + ")" : ""} e é paga com o <b>salário de ${lab(fatK)}</b>. Não mexe no dinheiro da conta agora.${antes ? ` <span class="icon-warn">Até dia ${fch} a compra ainda cai na fatura de ${lab(k)}: espere o dia ${fch + 1}.</span>` : ""}</div></div>
+          <div class="op deb"><div class="t">🏦 No débito / Pix</div><div class="v ${deb <= 0 ? "neg" : ""}">${R(deb)}</div>
+            <div class="q">Sai <b>da conta agora</b>, do que sobrou do <b>salário de ${lab(k)}</b> depois das contas e da fatura deste mês${sobraSal < rest ? ` (sobra prevista: ${R(sobraSal)})` : ""}.${deb <= 0 ? " <b>Neste mês, prefira o crédito.</b>" : ""}${p.fora ? ` + <b>${R(p.fora)}</b> do 13º/férias quando o dinheiro cair.` : ""}</div></div>
+          <p class="nota">É o mesmo teto: o que você gastar em um lado diminui o outro.</p>`;
+      }
+    }
     let man = null; try { man = localStorage.getItem("gasto-" + k); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
     renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
-      ["Fora do Inter disponível", R(p.fora), "13º livre + férias (Pix/débito)"],
+      ["13º/férias livres", R(p.fora), "extra do mês, além do teto"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
       ["Limite do Inter a configurar", R(p.limite), "fatura de " + lab(p.fatura) + ": " + R(p.faturaInter)],
       ["Sobra estimada do mês", R(pr.sobra[i]), "antes das compras novas", pr.sobra[i] < 0 ? "neg" : ""],
@@ -504,7 +492,7 @@
     const fmt = pct ? (v) => P(v) : (v) => R0(v);
     const sel = rg.indexOf(k), hl = (c) => rg.map((_, n) => (n === sel ? c : c + "B3"));
     const pv = (f) => rg.map((m) => (DATA.plano[m] || {})[f] || 0);
-    draw("cGastar", "bar", L, [ds("Inter à vista", conv(pv("vista")), hl(cor[0])), ds("Inter parcelado (limite)", conv(pv("parc")), hl(cor[1])), ds("Fora do Inter", conv(pv("fora")), hl(cor[2])), ds("VR / Flash", conv(pv("vr")), hl(cor[3]))], baseOpts(true, fmt));
+    draw("cGastar", "bar", L, [ds("Teto do mês (cartão + Pix/débito)", conv(pv("teto")), hl(cor[0])), ds("13º/férias livres", conv(pv("fora")), hl(cor[2])), ds("VR / Flash", conv(pv("vr")), hl(cor[3]))], baseOpts(true, fmt));
     draw("cReserva", "line", L, [ds("Reserva acumulada", pv("reservaAc"), cor[0], { fill: false, tension: 0.2, borderWidth: 2, pointRadius: 4, pointBackgroundColor: cor[0] })], baseOpts(false, (v) => R0(v)));
     draw("cAporte", "bar", L, [ds("Vai para a reserva", pv("reserva"), hl(cor[2])), { type: "line", label: "Meta (" + P(DATA.pct) + " do líquido)", data: pv("meta"), borderColor: css("--muted"), borderDash: [6, 4], borderWidth: 2, pointRadius: 0, datalabels: { display: false } }], baseOpts(false, (v) => R0(v)));
     draw("cLimite", "bar", L, [ds("Limite a configurar", pv("limite"), hl(cor[0])), ds("Fatura que vai chegar", pv("faturaInter"), hl(cor[1]))], baseOpts(false, (v) => R0(v)));
@@ -767,62 +755,75 @@
   }
 
   // ---------- simulação: novas compras e dívidas ----------
-  const TIPOS = { parc: "Compra parcelada no cartão", vista: "Compra à vista no cartão", div: "Nova dívida (boleto, empréstimo, financiamento)" };
+  const TIPOS = { compra: "Compra (cartão, Pix ou débito — à vista ou parcelada)", div: "Nova dívida (boleto, empréstimo, financiamento)" };
+  const PIX = "Pix/débito";
   let SIM = null, SIM_DEF = null;
   const cent = (x) => Math.round(x * 100) / 100;
   function simLoad() {
     let s = null; try { s = JSON.parse(localStorage.getItem("sim-v2")); } catch (_) {}
     if (!s || !Array.isArray(s.itens)) s = { itens: [], modo: "orc" };
-    s.itens.forEach((it) => { if (!DATA.meses.includes(it.mes)) it.mes = SIM_DEF; if (it.cartao && !DATA.cartoes.includes(it.cartao)) it.cartao = DATA.cartoes[0]; });
+    s.itens.forEach((it) => { if (it.t === "parc" || it.t === "vista") { if (it.t === "vista") it.n = 1; it.t = "compra"; }
+      if (!DATA.meses.includes(it.mes)) it.mes = SIM_DEF; if (it.cartao && it.cartao !== PIX && !DATA.cartoes.includes(it.cartao)) it.cartao = DATA.cartoes[0]; });
     return s;
   }
   const simSave = () => { try { localStorage.setItem("sim-v2", JSON.stringify(SIM)); } catch (_) {} };
   function novoItem(t) {
     const base = { id: Date.now() + "" + Math.random().toString(36).slice(2, 6), t, desc: "", valor: 0, pct: 0 };
-    if (t === "parc") return Object.assign(base, { n: 3, cartao: DATA.cartoes[0], mes: SIM_DEF });
-    if (t === "vista") return Object.assign(base, { n: 1, cartao: DATA.cartoes[0], mes: SIM_DEF });
+    if (t === "compra") return Object.assign(base, { n: 1, cartao: DATA.cartoes[0], mes: SIM_DEF });
     return Object.assign(base, { n: 12, mes: DATA.meses.includes(addM(SIM_DEF, 1)) ? addM(SIM_DEF, 1) : SIM_DEF });
   }
-  // cobranças do item por mês de pagamento (salário que paga)
+  // cobranças do item: row = mês do plano (teto) que a parcela ocupa; pag = salário que paga
   function cobrancas(it) {
-    const n = it.t === "vista" ? 1 : Math.max(1, Math.round(+it.n || 1)), out = [];
+    const n = Math.max(1, Math.round(+it.n || 1)), out = [], pix = it.cartao === PIX;
     const parcela = it.t === "div" ? +it.valor || 0 : (+it.valor || 0) / n;
     const meu = parcela * (1 - Math.min(100, Math.max(0, +it.pct || 0)) / 100);
-    for (let i = 0; i < n; i++) out.push({ pag: it.t === "div" ? addM(it.mes, i) : addM(it.mes, i + 1), valor: parcela, meu });
+    for (let i = 0; i < n; i++) {
+      if (it.t === "div") out.push({ row: addM(it.mes, i - 1), pag: addM(it.mes, i), valor: parcela, meu, div: true });
+      else out.push({ row: addM(it.mes, i), pag: pix ? addM(it.mes, i) : addM(it.mes, i + 1), valor: parcela, meu, div: false });
+    }
     return { n, parcela, meu, lista: out };
   }
   function simCalc() {
-    const minMes = DATA.minMes || 0, porPag = {};
-    SIM.itens.forEach((it) => cobrancas(it).lista.forEach((c) => (porPag[c.pag] = (porPag[c.pag] || 0) + c.meu)));
+    const minMes = DATA.minMes || 0, pool = {}, divs = {};
+    SIM.itens.forEach((it) => cobrancas(it).lista.forEach((c) => { const o = c.div ? divs : pool; o[c.row] = (o[c.row] || 0) + c.meu; }));
     const meses = DATA.meses.filter((k) => DATA.plano[k] && k >= DATA.planIni);
+    const cal = mesAtual();
     let acc = 0;
     const linhas = meses.map((k) => {
       const p = DATA.plano[k], F = addM(k, 1), j = idx(F), pr = DATA.proj;
-      const nova = cent(porPag[F] || 0);
+      const nPool = cent(pool[k] || 0), nDiv = cent(divs[k] || 0), nova = cent(nPool + nDiv);
+      const ja = k === cal ? gastoInter(k).v : p.ja || 0;
       const shares = (p.reserva || 0) - ((p.espaco || 0) - (p.teto || 0));
-      let tetoD, resD;
-      if (SIM.modo === "res") { tetoD = p.teto || 0; resD = (p.reserva || 0) - nova; }
-      else { const espD = (p.espaco || 0) - nova; tetoD = p.teto > 0 ? Math.max(minMes, espD - (p.meta || 0)) : 0; resD = espD - tetoD + shares; }
+      const aindaA = (p.teto || 0) - ja;
+      let aindaD, resD, tetoD;
+      if (SIM.modo === "res") { tetoD = p.teto || 0; aindaD = aindaA; resD = (p.reserva || 0) - nova; }
+      else {
+        const espD = (p.espaco || 0) - nDiv;
+        tetoD = p.teto > 0 ? Math.max(0, Math.min(espD, Math.max(minMes, espD - (p.meta || 0)))) : 0;
+        aindaD = tetoD - ja - nPool;
+        const estouro = Math.max(0, nPool - Math.max(0, tetoD - ja));
+        resD = espD - tetoD + shares - estouro;
+      }
       acc += resD - (p.reserva || 0);
       const ent = j >= 0 ? pr.entradas[j] : 0;
       const obrig = j >= 0 ? Math.abs(pr.fixos[j]) + Math.abs(pr.parcelas[j]) + Math.abs(pr.variaveis[j]) - pr.reemb[j] : 0;
-      return { k, F, nova, ent, obrig, compA: ent ? obrig / ent : null, compD: ent ? (obrig + nova) / ent : null,
+      return { k, F, nova, nPool, nDiv, ent, obrig, compA: ent ? obrig / ent : null, compD: ent ? (obrig + nova) / ent : null,
         sobraA: j >= 0 ? pr.sobra[j] : null, sobraD: j >= 0 ? pr.sobra[j] - nova : null,
-        tetoA: p.teto || 0, tetoD: cent(tetoD), resA: p.reserva || 0, resD: cent(resD), accA: p.reservaAc || 0, accD: cent((p.reservaAc || 0) + acc), meta: p.meta || 0, p };
+        tetoA: cent(aindaA), tetoD: cent(aindaD), resA: p.reserva || 0, resD: cent(resD), accA: p.reservaAc || 0, accD: cent((p.reservaAc || 0) + acc), meta: p.meta || 0, p };
     });
-    return { linhas, porPag };
+    return { linhas };
   }
   function renderSimEditor() {
     const mesOpts = (sel) => DATA.meses.filter((k) => k >= DATA.planIni || k === sel).map((k) => `<option value="${k}" ${k === sel ? "selected" : ""}>${lab(k)}</option>`).join("");
-    const carOpts = (sel) => DATA.cartoes.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
+    const carOpts = (sel) => DATA.cartoes.concat([PIX]).map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
     $("sItens").innerHTML = SIM.itens.length ? SIM.itens.map((it, n) => `
       <div class="simit" data-i="${n}">
         <div class="simit-h"><b>${n + 1}. ${TIPOS[it.t]}</b><button type="button" class="btn ghost sm" data-rm="${n}" aria-label="Remover">Remover</button></div>
         <div class="simit-g">
           <div class="f wide"><label>Descrição</label><input data-k="desc" type="text" value="${esc(it.desc)}" placeholder="${it.t === "div" ? "ex.: empréstimo, financiamento" : "ex.: tênis, passagem"}"></div>
           <div class="f"><label>${it.t === "div" ? "Valor da parcela (R$)" : "Valor total da compra (R$)"}</label><input data-k="valor" type="number" inputmode="decimal" step="0.01" min="0" value="${it.valor || ""}"></div>
-          ${it.t === "vista" ? "" : `<div class="f"><label>Nº de parcelas</label><input data-k="n" type="number" inputmode="numeric" step="1" min="1" max="60" value="${it.n}"></div>`}
-          ${it.t === "div" ? "" : `<div class="f"><label>Cartão</label><select data-k="cartao">${carOpts(it.cartao)}</select></div>`}
+          <div class="f"><label>${it.t === "div" ? "Nº de parcelas" : "Nº de vezes (1 = à vista)"}</label><input data-k="n" type="number" inputmode="numeric" step="1" min="1" max="60" value="${it.n}"></div>
+          ${it.t === "div" ? "" : `<div class="f"><label>Forma de pagamento</label><select data-k="cartao">${carOpts(it.cartao)}</select></div>`}
           <div class="f"><label>${it.t === "div" ? "1ª parcela paga em" : "Mês da compra"}</label><select data-k="mes">${mesOpts(it.mes)}</select></div>
           <div class="f"><label>Outra pessoa me paga (%)</label><input data-k="pct" type="number" inputmode="numeric" step="1" min="0" max="100" value="${it.pct || ""}" placeholder="0"></div>
         </div>
@@ -845,15 +846,12 @@
       const c = cobrancas(it), nome = it.desc ? "“" + esc(it.desc) + "”" : "Item " + (n + 1), el = $("sInfo" + n);
       if (!it.valor) { if (el) el.textContent = "Preencha o valor."; return; }
       const ini = c.lista[0].pag, fim = c.lista[c.lista.length - 1].pag;
-      if (el) el.innerHTML = (it.t === "div" ? `${c.n}x de ${R(c.parcela)} (total ${R(c.parcela * c.n)})` : c.n > 1 ? `${c.n}x de ${R(c.parcela)} no ${esc(it.cartao)}` : `${R(c.parcela)} à vista no ${esc(it.cartao)}`) +
-        ` · pago com o salário de ${lab(ini)}${c.n > 1 ? " até " + lab(fim) : ""}` + (it.pct ? ` · meu custo ${R(c.meu)}/mês (${esc(it.pct)}% volta pra mim)` : "");
+      const r0 = c.lista[0].row, r1 = c.lista[c.lista.length - 1].row;
+      if (el) el.innerHTML = (it.t === "div" ? `${c.n}x de ${R(c.parcela)} (total ${R(c.parcela * c.n)}) · pago com o salário de ${lab(ini)}${c.n > 1 ? " até " + lab(fim) : ""}`
+        : (c.n > 1 ? `${c.n}x de ${R(c.parcela)}` : `${R(c.parcela)} à vista`) + ` no ${esc(it.cartao)} · ocupa o teto de ${lab(r0)}${c.n > 1 ? " até " + lab(r1) : ""}`) +
+        (it.pct ? ` · meu custo ${R(c.meu)}/mês (${esc(it.pct)}% volta pra mim)` : "");
       const p = DATA.plano[it.mes] || {};
-      if (it.t !== "div" && it.cartao !== card0) av.push(`<span class="icon-warn">${nome}: a combinação era parar de usar ${esc(it.cartao)} e concentrar no ${esc(card0)}.</span>`);
-      if (it.t === "parc" && p.parc != null) {
-        if (p.parc && c.parcela > p.parc + 0.005) av.push(`<span class="icon-warn">${nome}: parcela de ${R(c.parcela)} passa do limite de parcelas novas de ${lab(it.mes)} (${R(p.parc)}/mês).</span>`);
-        if (p.vezes && c.n > p.vezes) av.push(`<span class="icon-warn">${nome}: ${c.n}x passa da regra de até ${p.vezes}x em ${lab(it.mes)}.</span>`);
-      }
-      if (it.t === "vista" && p.vista != null && c.parcela > (p.teto || 0) + 0.005) av.push(`<span class="icon-warn">${nome}: ${R(c.parcela)} à vista é mais do que o orçamento sugerido de ${lab(it.mes)} (${R(p.teto)}).</span>`);
+      if (it.t !== "div" && it.cartao !== card0 && it.cartao !== PIX) av.push(`<span class="icon-warn">${nome}: a combinação era parar de usar ${esc(it.cartao)} e concentrar no ${esc(card0)}.</span>`);
       if (fim > DATA.meses[DATA.meses.length - 1]) av.push(`<span class="icon-warn">${nome}: as últimas parcelas passam de ${lab(DATA.meses[DATA.meses.length - 1])}, fim da projeção da planilha.</span>`);
     });
     const temValor = SIM.itens.some((it) => +it.valor > 0);
@@ -871,25 +869,25 @@
     $("sKpis").innerHTML = [
       ["Custo total para mim", R(totMeu), totCheio - totMeu > 0.005 ? "valor cheio " + R(totCheio) : afet.length + " mês(es) com cobrança"],
       ["Maior cobrança no mês", R(maxN.nova), maxN.k ? "compras de " + lab(maxN.k) + " (salário de " + lab(maxN.F) + ")" : ""],
-      ["Orçamento de gastos", "−" + R(cortOrc), SIM.modo === "res" ? "orçamento mantido" : "a menos para gastar no período"],
+      ["Teto dos meses", "−" + R(cortOrc), SIM.modo === "res" ? "teto mantido" : "a menos para gastar no período"],
       ["Reserva em " + lab(ult.k), R(ult.accD), (difRes < 0 ? "−" : "+") + R(Math.abs(difRes)) + " vs. sem a simulação", ult.accD < 0 ? "neg" : difRes < -0.005 ? "" : "pos"],
       ["Entrada comprometida", maxC.k ? P(maxC.compD) : "—", maxC.k ? "no pior mês (" + lab(maxC.F) + "), antes " + P(maxC.compA) : ""],
     ].map(([l, v, s, c]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${c || ""}">${v}</div><div class="s">${s}</div></div>`).join("");
     // avisos do planejamento
-    const neg = vis.filter((l) => l.resD < -0.005), noMin = vis.filter((l) => l.nova > 0 && SIM.modo === "orc" && l.tetoD <= minMes + 0.005 && l.resD < l.resA - 0.005);
+    const neg = vis.filter((l) => l.resD < -0.005), noMin = vis.filter((l) => l.nPool > 0 && SIM.modo === "orc" && l.tetoD < -0.005);
     const abaixoMeta = vis.filter((l) => l.nova > 0 && l.resD >= -0.005 && l.resD < l.meta - 0.01 && l.resA >= l.meta - 0.01);
     const resNeg = vis.find((l) => l.accD < -0.005);
     if (neg.length) av.unshift(`<span class="icon-bad">Em ${neg.length} mês(es) a conta não fecha (${neg.map((l) => lab(l.k) + " " + R0(l.resD)).join(", ")}): a diferença teria que sair da reserva.</span>`);
     if (resNeg) av.unshift(`<span class="icon-bad">A reserva ficaria negativa a partir de ${lab(resNeg.k)} (${R(resNeg.accD)}).</span>`);
-    if (noMin.length) av.push(`<span class="icon-warn">Em ${noMin.map((l) => lab(l.k)).join(", ")} o orçamento já fica no mínimo de ${R0(minMes)}/mês, então a parcela passa a sair da reserva.</span>`);
+    if (noMin.length) av.push(`<span class="icon-bad">Passa do teto em ${noMin.map((l) => lab(l.k) + " (falta " + R0(-l.tetoD) + ")").join(", ")}: essa diferença sairia da reserva.</span>`);
     if (abaixoMeta.length) av.push(`<span class="icon-warn">A reserva do mês fica abaixo da meta de ${P(DATA.pct)} em ${abaixoMeta.map((l) => lab(l.k)).join(", ")}.</span>`);
-    if (!av.length) av.push(`<span class="icon-ok">Cabe no planejamento: ${SIM.modo === "res" ? "o orçamento continua o mesmo e a reserva absorve a parcela" : "a parcela sai do orçamento de gastos e a meta da reserva continua batida"}.</span>`);
+    if (!av.length) av.push(`<span class="icon-ok">Cabe no planejamento: ${SIM.modo === "res" ? "o teto continua o mesmo e a reserva absorve a compra" : "a compra cabe no teto dos meses e a meta da reserva continua batida"}.</span>`);
     av.push(`<span class="muted small">Se decidir fazer, lance na aba Lançamentos da planilha para entrar no planejamento de verdade.</span>`);
     $("sAviso").innerHTML = av.join("<br>");
     // gráficos
     const L = vis.map((l) => lab(l.k));
     const ultAf = afet.length ? afet[afet.length - 1].k : primeiro, vl = vis.filter((l) => l.k <= addM(ultAf, 2)), bad = css("--bad");
-    const cl = draw("cSimLivre", "bar", vl.map((l) => lab(l.k)), [ds("Nova parcela", vl.map((l) => l.nova), cor[1]), ds("Para gastar", vl.map((l) => l.tetoD), cor[0]),
+    const cl = draw("cSimLivre", "bar", vl.map((l) => lab(l.k)), [ds("Nova parcela", vl.map((l) => l.nova), cor[1]), ds("Ainda posso gastar", vl.map((l) => Math.max(0, l.tetoD)), cor[0]),
       ds("Vai para a reserva", vl.map((l) => Math.max(0, l.resD)), cor[2])].concat(vl.some((l) => l.resD < -0.005) ? [ds("Falta (sai da reserva)", vl.map((l) => Math.min(0, l.resD)), bad)] : []), baseOpts(true, (v) => R0(v)));
     if (vl.length > 8) { cl.options.plugins.datalabels.display = (c) => c.datasetIndex === 0 && !!c.raw && (c.dataIndex === 0 || vl[c.dataIndex].nova !== vl[c.dataIndex - 1].nova); cl.update(); }
     draw("cSimRes", "line", L, [
@@ -898,9 +896,9 @@
       baseOpts(false, (v) => R0(v), {}));
     const cr = charts.cSimRes; cr.options.plugins.datalabels.display = (c) => c.datasetIndex === 1 && (c.dataIndex === vis.length - 1 || c.dataIndex % 3 === 0); cr.update();
     // tabela
-    $("tSim").innerHTML = `<tr><th>Mês das compras</th><th>Nova parcela</th><th>Entrada comprometida</th><th>Orçamento para gastar</th><th>Vai para a reserva</th><th>Reserva acumulada</th><th>Sobra do salário seguinte</th></tr>` +
-      vis.map((l) => `<tr class="${l.nova > 0 ? "" : "fora"}"><td>${lab(l.k)}<div class="muted small">salário de ${lab(l.F)}</div></td><td>${l.nova ? R(l.nova) : "—"}</td><td>${l.compA == null ? "—" : ab(l.compA, l.compD, P)}</td>
-        <td>${ab(l.tetoA, l.tetoD)}</td><td class="${l.resD < 0 ? "neg" : ""}">${ab(l.resA, l.resD)}</td><td class="${l.accD < 0 ? "neg" : ""}">${ab(l.accA, l.accD)}</td><td class="${l.sobraD != null && l.sobraD < 0 ? "neg" : ""}">${l.sobraA == null ? "—" : ab(l.sobraA, l.sobraD)}</td></tr>`).join("");
+    $("tSim").innerHTML = `<tr><th>Mês das compras</th><th>Nova parcela</th><th>Entrada comprometida</th><th>Ainda posso gastar</th><th>Vai para a reserva</th><th>Reserva acumulada</th><th>Sobra do salário seguinte</th></tr>` +
+      vis.map((l) => `<tr class="${l.nova > 0 ? "" : "fora"}"><td>${lab(l.k)}</td><td>${l.nova ? R(l.nova) : "—"}</td><td>${l.compA == null ? "—" : ab(l.compA, l.compD, P)}</td>
+        <td class="${l.tetoD < 0 ? "neg" : ""}">${ab(l.tetoA, l.tetoD)}</td><td class="${l.resD < 0 ? "neg" : ""}">${ab(l.resA, l.resD)}</td><td class="${l.accD < 0 ? "neg" : ""}">${ab(l.accA, l.accD)}</td><td class="${l.sobraD != null && l.sobraD < 0 ? "neg" : ""}">${l.sobraA == null ? "—" : ab(l.sobraA, l.sobraD)}</td></tr>`).join("");
   }
   function renderSim() { if (!SIM) SIM = simLoad(); renderSimEditor(); renderSimResultado(); }
   document.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => { SIM.itens.push(novoItem(b.dataset.add)); simSave(); renderSimEditor(); renderSimResultado(); }));

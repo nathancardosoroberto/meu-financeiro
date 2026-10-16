@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=16">
 </head>
 <body class="travado">
 <header class="top">
@@ -74,20 +74,21 @@
 
     <section class="hero card">
       <div class="hero-main">
-        <p class="eyebrow">Ainda posso gastar no crédito do <span class="cardname">Inter</span> em <span id="hMes"></span> <span id="hTag"></span></p>
+        <p class="eyebrow">Ainda posso gastar em <span id="hMes"></span> <span class="muted small">(cartão + Pix/débito)</span> <span id="hTag"></span></p>
         <p class="big" id="hRestante">—</p>
         <div class="bar" role="progressbar" aria-label="Uso do teto"><span id="hBar"></span></div>
+        <div class="como" id="hComo"></div>
         <p class="muted" id="hResumo"></p>
       </div>
       <div class="hero-side">
-        <label for="gastoManual" class="muted">Já gastei no Inter neste mês (valor do app)</label>
+        <label for="gastoManual" class="muted">Já gastei neste mês (cartão + Pix/débito)</label>
         <input id="gastoManual" type="number" step="0.01" min="0" placeholder="vazio = aba Lançamentos">
         <p class="muted small">Fica salvo só neste navegador.</p>
       </div>
     </section>
 
     <section class="card" id="cabeCard">
-      <div class="row-between"><h2>Quanto cabe numa compra no <span class="cardname">Inter</span></h2>
+      <div class="row-between"><h2>Quanto cabe numa compra</h2>
         <label class="muted small cabe-in">Valor da compra <input id="cabeValor" type="number" step="0.01" min="0" placeholder="ex.: 600"></label></div>
       <p class="muted small" id="cabeInfo"></p>
       <div class="tblwrap"><table class="tbl" id="cabeTbl"></table></div>
@@ -114,7 +115,7 @@
       <div class="card"><h2>Reserva de emergência</h2><div id="reserva"></div></div>
     </section>
 
-    <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: Inter à vista + parcelas novas + fora do Inter (13º livre e férias) + VR/Flash (supermercado).</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
+    <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: teto do mês (cartão + Pix/débito, à vista ou parcelado) + 13º/férias livres + VR/Flash</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
     <section class="grid2">
       <div class="card"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>
       <div class="card"><h2>Aporte na reserva x meta</h2><div class="chart"><canvas id="cAporte"></canvas></div></div>
@@ -201,13 +202,12 @@
       <p class="muted small">Teste uma compra ou dívida antes de fazer. Nada muda na planilha: a simulação fica só neste navegador. Compras no cartão em um mês são pagas com o salário do mês seguinte (5º dia útil).</p>
       <div id="sItens"></div>
       <div class="sim-add">
-        <button type="button" class="btn" data-add="parc">+ Compra parcelada no cartão</button>
-        <button type="button" class="btn" data-add="vista">+ Compra à vista no cartão</button>
+        <button type="button" class="btn" data-add="compra">+ Compra (cartão, Pix ou débito)</button>
         <button type="button" class="btn" data-add="div">+ Nova dívida</button>
         <button type="button" class="btn ghost" id="sLimpar">Limpar tudo</button>
       </div>
-      <div class="f sim-modo"><label for="sModo">De onde sai o dinheiro da parcela? (orçamento = protege a reserva · reserva = mantém o que dá para gastar)</label>
-        <select id="sModo"><option value="orc">Do orçamento de gastos</option><option value="res">Da reserva</option></select></div>
+      <div class="f sim-modo"><label for="sModo">De onde sai o dinheiro? (teto do mês = protege a reserva · reserva = mantém o que dá para gastar)</label>
+        <select id="sModo"><option value="orc">Do teto do mês</option><option value="res">Da reserva</option></select></div>
     </section>
     <div id="sRes" hidden>
       <section class="kpis" id="sKpis"></section>
