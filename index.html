@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body class="travado">
 <header class="top">
@@ -115,6 +115,11 @@
       <div class="card"><h2>Reserva de emergência</h2><div id="reserva"></div></div>
     </section>
 
+    <section class="card" id="rendCard"><div class="row-between"><h2>Meus rendimentos — <span id="rendTit"></span></h2><span class="muted small">quanto eu ganho por mês, líquido</span></div>
+      <div class="kpis" id="rendKpis"></div>
+      <div class="chart"><canvas id="cRend"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tRend"></table></div>
+      <p class="muted small">Salário = salário líquido do mês (com reajustes; no mês depois das férias ele vem menor, porque parte foi adiantada nas férias). Abono, retroativos e outras rendas vêm da aba Rendas Extras; 13º e férias da aba 13º e Férias. Reembolsos de terceiros não entram (não são renda).</p></section>
     <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: teto do mês (cartão + Pix/débito, à vista ou parcelado) + 13º/férias livres + VR/Flash</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
     <section class="grid2">
       <div class="card"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>

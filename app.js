@@ -57,6 +57,12 @@
     const C = "Configurações";
     D.ini = ym(cell(wb, C, "B3")); D.refPlanilha = ym(cell(wb, C, "B4"));
     D.versao = txt(cell(wb, C, "E3"));
+    D.extras = [];
+    if (wb.Sheets["Rendas Extras"]) rows(wb, "Rendas Extras").forEach((r, n) => {
+      if (n < 4 || !r) return; const ini = ym(r[0]), v = num(r[2]); if (!ini || !v) return;
+      const rec = txt(r[3]) === "Sim", fim = rec ? ym(r[4]) || "9999-12" : ini;
+      D.extras.push({ ini, fim, desc: txt(r[1]), valor: v, vr: /VR|Flash/i.test(txt(r[6])) });
+    });
     D.d13 = { "11": toDate(cell(wb, "13º e Férias", "C13")), "12": toDate(cell(wb, "13º e Férias", "C15")) };
     D.reservaInformada = num(cell(wb, C, "B5")); D.pct = num(cell(wb, C, "B6")); D.meta = D.pct > 1 ? D.pct : 0; D.planIni = ym(cell(wb, C, "B8")) || D.ini;
     D.cartoes = []; D.venc = {};
@@ -458,7 +464,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + addM(k, -1)); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
+    renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderRend(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
       ["13º/férias livres", R(p.fora), "extra do mês, além do teto"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
@@ -625,6 +631,35 @@
 
   // ---------- VR (Flash) ----------
   const isVR = (l) => l.paga === "VR";
+  function ultimoDiaUtil(y, m0) { const fer = new Set(DATA.ferNac || DATA.feriados || []); const d = new Date(y, m0 + 1, 0, 12);
+    while (d.getDay() === 0 || d.getDay() === 6 || fer.has(ymd(d))) d.setDate(d.getDate() - 1); return d; }
+  function proxRecargaVR() { const h = new Date(); h.setHours(12, 0, 0, 0); let d = ultimoDiaUtil(h.getFullYear(), h.getMonth());
+    if (d < h) d = ultimoDiaUtil(h.getFullYear(), h.getMonth() + 1);
+    const uso = addM(d.getFullYear() + "-" + pad(d.getMonth() + 1), 1), dias = Math.round((d - h) / 864e5);
+    return { data: d, uso, valor: vrMes(uso), dias }; }
+  const CAT_REND = [["sal", "Salário líquido"], ["d13", "13º salário"], ["fer", "Férias"], ["abono", "Abono"], ["retro", "Retroativos"], ["outras", "Outras rendas"], ["vr", "VR / Flash"]];
+  function rendimentos(m) {
+    const j = idx(m), pr = DATA.proj, o = { sal: 0, d13: 0, fer: 0, abono: 0, retro: 0, outras: 0, vr: 0, itens: [] };
+    if (j < 0) return o;
+    const ex = (DATA.extras || []).filter((e) => e.ini <= m && e.fim >= m);
+    let exConta = 0;
+    ex.forEach((e) => { if (e.vr) return; exConta += e.valor; const c = /abono/i.test(e.desc) ? "abono" : /retroativ/i.test(e.desc) ? "retro" : "outras"; o[c] += e.valor; o.itens.push({ c, desc: e.desc, valor: e.valor }); });
+    o.sal = (pr.renda[j] || 0) - exConta + (pr.ajuste[j] || 0); o.d13 = pr.d13[j] || 0; o.fer = pr.ferias[j] || 0; o.vr = pr.vr[j] || 0;
+    o.dinheiro = o.sal + o.d13 + o.fer + o.abono + o.retro + o.outras; o.total = o.dinheiro + o.vr;
+    ex.filter((e) => e.vr).forEach((e) => o.itens.push({ c: "vr", desc: e.desc, valor: e.valor }));
+    return o;
+  }
+  function renderRend(k) {
+    const r = rendimentos(k), cor = pal(), cores = [cor[0], cor[3], cor[5], cor[1], cor[4], css("--muted"), cor[2]];
+    $("rendTit").textContent = lab(k) + (DATA.tipo[idx(k)] === "Realizado" ? " (realizado)" : " (previsto)");
+    $("rendKpis").innerHTML = `<div class="kpi"><div class="l">Total em dinheiro</div><div class="v">${R(r.dinheiro)}</div><div class="s">tudo o que cai na conta no mês (líquido)</div></div>` +
+      `<div class="kpi"><div class="l">+ VR / Flash</div><div class="v">${R(r.vr)}</div><div class="s">só para alimentação · total ${R(r.total)}</div></div>` +
+      CAT_REND.filter(([c]) => c !== "vr" && r[c]).map(([c, n]) => `<div class="kpi"><div class="l">${n}</div><div class="v">${R(r[c])}</div><div class="s">${c === "sal" ? "salário fixo do mês" : (r.itens.filter((i) => i.c === c).map((i) => esc(i.desc)).join(" · ") || "")}</div></div>`).join("");
+    const rg = range(), L = rg.map(lab), rs = rg.map(rendimentos);
+    draw("cRend", "bar", L, CAT_REND.filter(([c]) => rs.some((x) => x[c])).map(([c, n]) => ds(n, rs.map((x) => Math.round(x[c] * 100) / 100), cores[CAT_REND.findIndex((z) => z[0] === c)])), baseOpts(true, (v) => R0(v)));
+    $("tRend").innerHTML = `<tr><th>Mês</th>${CAT_REND.map(([, n]) => `<th>${n}</th>`).join("")}<th>Total em dinheiro</th></tr>` +
+      rg.map((m, n) => `<tr class="${m === k ? "sel" : ""}"><td>${lab(m)}</td>${CAT_REND.map(([c]) => `<td>${rs[n][c] ? R(rs[n][c]) : "—"}</td>`).join("")}<td><b>${R(rs[n].dinheiro)}</b></td></tr>`).join("");
+  }
   function vrMes(m) { const j = idx(m); return j >= 0 ? DATA.proj.vr[j] || 0 : 0; }
   const vrGasto = (m) => DATA.lanc.filter((l) => isVR(l) && l.ini === m).reduce((s, l) => s + l.total, 0);
   function vrSaldoIni(m) { let s = DATA.vrIni || 0; for (const k of DATA.meses) { if (k < DATA.planIni) continue; if (k >= m) break; s += vrMes(k) - vrGasto(k); } return s; }
@@ -637,7 +672,8 @@
     const futuro = m > cal, ini = futuro ? 0 : vrSaldoIni(m), rec = vrMes(m), g = vrGasto(m), saldo = ini + rec - g, dr = diasRestantes(m);
     const usado = ini + rec ? g / (ini + rec) : 0;
     $("vrTit").textContent = lab(m) + (futuro ? " (previsto)" : "");
-    $("vrBody").innerHTML = `<div class="kpis">
+    const pv = proxRecargaVR();
+    $("vrBody").innerHTML = `<div class="vr-prox">📅 <b>Próxima recarga: ${fmtD(pv.data)}</b> (${["dom", "seg", "ter", "qua", "qui", "sex", "sáb"][pv.data.getDay()]}, ${pv.dias === 0 ? "hoje" : "em " + pv.dias + " dia" + (pv.dias > 1 ? "s" : "")}) · <b>${R(pv.valor)}</b> para usar em ${lab(pv.uso)} <span class="muted small">(último dia útil do mês)</span></div><div class="kpis">
         <div class="kpi"><div class="l">${futuro ? "VR previsto do mês" : "Saldo no Flash agora"}</div><div class="v ${saldo < 0 ? "neg" : ""}">${R(saldo)}</div><div class="s">${futuro ? "mais o que sobrar dos meses anteriores" : R(ini) + " que sobrou + " + R(rec) + " do mês" + (g ? " − " + R(g) + " gastos" : "")}</div></div>
         <div class="kpi"><div class="l">Por semana</div><div class="v">${R(saldo / Math.max(1, dr.cor / 7))}</div><div class="s">${(dr.cor / 7).toFixed(1).replace(".", ",")} semanas ${futuro ? "no mês" : "até o fim do mês"}</div></div>
         <div class="kpi"><div class="l">Por dia útil</div><div class="v">${R(dr.ut ? saldo / dr.ut : 0)}</div><div class="s">${dr.ut} dias úteis (seg a sex, sem feriados nacionais) ${futuro ? "no mês" : "restantes, com hoje"}</div></div>
