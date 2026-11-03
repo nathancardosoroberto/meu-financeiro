@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body class="travado">
 <div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -62,6 +62,14 @@
   <!-- ============ VISÃO GERAL (só o consolidado) ============ -->
   <div class="tab" id="tab-geral">
     <section class="card sit" id="sit"></section>
+    <section class="card fd ov-c" id="fluxoDia" data-fonte="dividas|cardContas">
+      <div class="row-between"><h2>📅 Fluxo diário do mês</h2><span class="muted small">quando cai cada entrada, quando vence cada conta e como fica o saldo</span></div>
+      <div class="fd-info" id="fdInfo"></div>
+      <div class="chart fd-chart"><canvas id="cFluxoDia"></canvas></div>
+      <p id="fdAviso"></p>
+      <h3 class="h3">Próximos movimentos</h3>
+      <div class="fd-lista" id="fdLista"></div>
+    </section>
     <section class="ov-kpis" id="ovKpis"></section>
     <section class="ov-grid">
       <div class="card ov-c span2" data-fonte="metas|cardRenda"><div class="row-between"><h2>Entradas x saídas</h2><span class="muted small">por mês</span></div><div class="chart"><canvas id="ovFluxo"></canvas></div></div>

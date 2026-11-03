@@ -814,9 +814,12 @@
     const barra = (itens, tot) => `<div class="sbar">${itens.filter(([, v]) => v > 0.005).map(([n, v, c]) => `<span style="flex:${v};background:${c}" title="${esc(n)}: ${R(v)}"></span>`).join("")}</div>`;
     const maxT = Math.max(entradas, saidas, 1);
     $("sit").innerHTML = `
-      <div class="sit-h"><div><p class="eyebrow">Minha situação financeira · ${labL(k)}</p><h2 class="sit-tit">${ok ? "✅ Dá para pagar todas as contas" : "⚠️ As contas passam das entradas"}</h2>
-        <p class="muted small">Hoje ${fmtD(h)} (${DIAS[h.getDay()]}) · salário de ${MESESL[+k.slice(5) - 1]} ${dataSalario(k) ? (h >= dataSalario(k) ? "caiu em " : "cai em ") + fmtD(dataSalario(k)) + " (" + DIAS[dataSalario(k).getDay()] + ")" : ""}</p></div>
-        <div class="sit-res ${ok ? "pos" : "neg"}"><div class="l">${ok ? "Sobra no mês" : "Falta no mês"}</div><div class="v">${R(Math.abs(sobra))}</div><div class="s">entradas − contas do mês</div></div></div>
+      <div class="sit-h"><div><p class="eyebrow">Minha situação financeira · ${labL(k)}</p><h2 class="sit-tit">${(() => { const fx = fluxoDiario(k), neg = fx.dias.filter((x) => x.saldo != null && x.saldo < -0.005);
+          if (!ok) return "⚠️ As contas passam das entradas";
+          if (neg.length) { const pior = neg.reduce((a, x) => (x.saldo < a.saldo ? x : a)); return `⚠️ Faltam ${R0(-pior.saldo)} para pagar tudo em dia (${pad(neg[0].d)}/${k.slice(5)} a ${pad(neg[neg.length - 1].d)}/${k.slice(5)})`; }
+          return "✅ Dá para pagar todas as contas em dia"; })()}</h2>
+        <p class="muted small">Hoje ${fmtD(h)} (${DIAS[h.getDay()]}) · salário de ${MESESL[+k.slice(5) - 1]} ${dataSalario(k) ? (h >= dataSalario(k) ? "caiu em " : "cai em ") + fmtD(dataSalario(k)) + " (" + DIAS[dataSalario(k).getDay()] + ")" : ""}</p>${checksMes(k, sobra)}</div>
+        <div class="sit-res ${ok ? "pos" : "neg"}"><div class="l">${ok ? "Sobra no mês" : "Falta no mês"}</div><div class="v">${R(Math.abs(sobra))}</div><div class="s">entradas − contas do mês</div>${marcosSaldo(k)}</div></div>
       <div class="sit-g">
         <div class="blk blk-in"><div class="blk-t">💰 Entradas do mês</div><div class="blk-v">${R(entradas)}</div>
           <ul class="blk-l"><li><span>Salário líquido</span><b>${R(r.sal)}</b></li><li><span>Outros rendimentos</span><b>${R(outros)}</b></li><li><span>A receber de terceiros</span><b>${R(recTot)}</b></li></ul>
@@ -839,6 +842,7 @@
         <div class="cmp-r out"><span>Contas</span><div class="cmp-b"><span style="width:${(saidas / maxT) * 100}%"></span></div><b>${R0(saidas)}</b></div></div>
       <div class="tl">${ev.map((e) => `<div class="tl-i ${e.caiu ? "ok" : ""}"><i></i><div><b>${e.d ? pad(e.d.getDate()) + "/" + pad(e.d.getMonth() + 1) : "—"}</b> ${esc(e.n)}</div><span>${e.caiu ? "✓ caiu" : quando(e.d)} · ${R0(e.v)}</span></div>`).join("")}</div>`;
 
+    renderFluxoDia(k);
     // ---- blocos de números (clicáveis: levam para a aba com os detalhes)
     const vr = (() => { const cal = mesAtual(); const m = DATA.meses.includes(cal) ? cal : k; return vrSaldoIni(m) + vrMes(m) - vrGasto(m); })();
     const Fm = addM(k, 1), j = idx(Fm), sal = j >= 0 ? DATA.proj.renda[j] : 0, parc = parcelasMeu(Fm), pp = sal ? parc / sal : 0;
@@ -895,6 +899,97 @@
       (al.length ? `<div class="alertas">${al.map(([nv, t, go]) => `<button type="button" class="al ${nv}" data-go="${go}">${t}<span>›</span></button>`).join("")}</div>` : `<p class="icon-ok">Nenhum alerta para ${lab(k)}.</p>`);
     $("ovAlertas").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => { const [t, id] = b.dataset.go.split("|"); if (/⚡/.test(b.textContent)) { vaiPara(t, id); setTimeout(() => abrirConta("Luz / Energia", "Conta", k), 450); } else vaiPara(t, id); }));
   }
+
+  // ================= FLUXO DIÁRIO DO MÊS =================
+  function saldoInicio() { let v = null; try { v = localStorage.getItem("saldo-inicio"); } catch (_) {} return v != null && v !== "" && isFinite(+v) ? { v: +v, manual: true } : { v: 0, manual: false }; }
+  // Fluxo do mês: tudo o que entra soma (acumula), cada conta sai no dia em que vence (paga em dia).
+  // Começa do zero no dia 1 (ou do que sobrou do mês anterior, se informado). No fim do mês = sobra do mês.
+  function fluxoDiario(k) {
+    const [y, m] = k.split("-").map(Number), nd = new Date(y, m, 0).getDate(), h = hoje12(), cal = mesAtual();
+    const atual = k === cal, passado = k < cal, dHoje = atual ? h.getDate() : passado ? nd + 1 : 0;
+    const dia = (d) => Math.min(nd, Math.max(1, d.getDate())), ev = [];
+    const naData = (d, fallback) => (d && d.getFullYear() === y && d.getMonth() + 1 === m ? dia(d) : fallback);
+    const dt = (s) => (s ? new Date(s + "T12:00:00") : null);
+    // entradas do mês (o Flash fica fora: é cartão de alimentação)
+    eventosMes(k).filter((e) => !e.vr).forEach((e) => { const d = naData(e.d, 5); ev.push({ d, n: e.n, v: e.v, feito: atual ? d < dHoje : passado }); });
+    // reembolsos de terceiros: o que já pagaram entra na data do pagamento; o que falta entra no vencimento
+    const rc = receber(k); statusReceber(k, rc); const por = {};
+    const soma = (d, n, v, feito) => { const key = n + "|" + d + "|" + feito; (por[key] = por[key] || { d, n, v: 0, feito }).v += v; };
+    rc.forEach((r) => { const pago = Math.min(r.valor, r.pago || 0), falta = r.valor - pago, dv = naData(r.quando, 15);
+      if (pago > 0.009) soma(naData(dt(r.dataPago), dv), "Reembolso " + r.pessoa, pago, true);
+      if (falta > 0.1) soma(dv, "Reembolso " + r.pessoa, falta, false); });
+    Object.values(por).forEach((o) => ev.push(o));
+    // contas do mês: todas consideradas pagas no vencimento (as já pagas, na data do pagamento)
+    contasMes(k).forEach((c) => { const dv = naData(diaVenc(k, c.dia), 10), v = c.pago && c.pago.valor ? c.pago.valor : c.valor;
+      if (c.pago) ev.push({ d: naData(dt(c.pago.data), dv), n: c.nome, v: -v, feito: true });
+      else ev.push({ d: dv, n: c.nome, v: -v, vencida: atual && dv < dHoje }); });
+    const si = saldoInicio(), ini = si.v, dias = []; let s = ini;
+    for (let d = 1; d <= nd; d++) {
+      const doDia = ev.filter((e) => e.d === d), ent = doDia.filter((e) => e.v > 0).reduce((t, e) => t + e.v, 0), sai = doDia.filter((e) => e.v < 0).reduce((t, e) => t + e.v, 0);
+      s += ent + sai; dias.push({ d, ent, sai, saldo: Math.round(s * 100) / 100, ev: doDia });
+    }
+    const d0 = Math.min(...ev.map((e) => e.d), nd), min = dias.filter((x) => x.d >= d0).reduce((a, x) => (a == null || x.saldo < a.saldo ? x : a), null);
+    const hojeS = atual ? (dHoje > 1 ? dias[dHoje - 2].saldo : ini) : null;
+    return { k, nd, dias, ev, ini, si, atual, dHoje, min, hojeS, fim: dias[nd - 1].saldo };
+  }
+  function checksMes(k, sobra) {
+    const f = fluxoDiario(k), mm = k.slice(5), neg = f.dias.filter((x) => x.saldo < -0.005);
+    const pior = neg.length ? neg.reduce((a, x) => (x.saldo < a.saldo ? x : a)) : null;
+    // reserva: o plano separa a meta do salário deste mês (linha k-1); nunca mais do que sobra no fim do mês
+    // reserva = sobra do mês − o que ainda está livre para gastar no débito (salário + 13º/férias livres do mês)
+    const dm = debitoMes(k), livre = Math.max(0, (dm.pd.teto || 0) + (dm.ex.valor || 0) - dm.usado), metaRes = Math.max(0, f.fim - livre);
+    const fim = (x) => x.fim === k && (x.custo || 0) > 0.005;
+    const acabam = DATA.dividas.filter(fim).map((d) => ({ n: d.desc, v: d.custo })).concat(DATA.lanc.filter((l) => l.parcelado && fim(l)).map((l) => ({ n: l.desc, v: l.custo })));
+    const libera = acabam.reduce((s, x) => s + x.v, 0);
+    const it = [
+      [pior ? "bad" : "ok", pior ? "⚠️" : "✅", pior ? `Faltam ${R0(-pior.saldo)} para pagar tudo em dia` : "Dá para pagar todas as contas em dia", pior ? `em ${pad(pior.d)}/${mm}` : `menor sobra ${R0(f.min ? f.min.saldo : 0)}${f.min ? " em " + pad(f.min.d) + "/" + mm : ""}`],
+      [metaRes > 0.005 ? "ok" : "warn", "🛡️", metaRes > 0.005 ? `Dá para mandar ${R0(metaRes)} para a reserva` : "Sem sobra para a reserva neste mês", `sobra ${R0(f.fim)} − ${R0(livre)} livres para gastar · sem gastar nada, até ${R0(Math.max(0, f.fim))}`],
+      [acabam.length ? "ok" : "info", "🏁", acabam.length ? `${acabam.length} parcelamento${acabam.length > 1 ? "s acabam" : " acaba"} este mês` : "Nenhum parcelamento acaba este mês", acabam.length ? `libera ${R0(libera)}/mês a partir de ${lab(addM(k, 1))}: ${acabam.slice(0, 3).map((x) => esc(x.n)).join(", ")}${acabam.length > 3 ? " +" + (acabam.length - 3) : ""}` : (() => { const prox = DATA.meses.find((m) => m > k && DATA.dividas.some((d) => d.fim === m && d.custo > 0)); return prox ? "próximo término em " + lab(prox) : ""; })()],
+    ];
+    return `<div class="checks">${it.map(([c, ic, t, s]) => `<div class="ck ${c}"><span class="ic">${ic}</span><div><b>${t}</b><small>${s}</small></div></div>`).join("")}</div>`;
+  }
+  function marcosSaldo(k) { // sobra acumulada no fim dos dias 5, 10, 15, 20 e fim do mês, com as contas pagas em dia
+    const f = fluxoDiario(k), mm = k.slice(5), cortes = [5, 10, 15, 20, f.nd]; let de = 1;
+    const cards = cortes.map((d) => { const ini = de; de = d + 1;
+      const ev = f.ev.filter((e) => e.d >= ini && e.d <= d), ent = ev.filter((e) => e.v > 0).reduce((s, e) => s + e.v, 0), pag = ev.filter((e) => e.v < 0).reduce((s, e) => s - e.v, 0);
+      const v = f.dias[d - 1].saldo, contas = ev.filter((e) => e.v < 0).map((e) => pad(e.d) + "/" + mm + " " + e.n + " " + R(-e.v));
+      const tip = `Do dia ${ini} ao ${d}: entrou ${R(ent)} e paguei ${R(pag)}` + (contas.length ? "\n" + contas.join("\n") : "") + `\nSobra acumulada no fim do dia ${d}: ${R(v)}`;
+      return `<div class="mc ${v < -0.005 ? "neg" : "pos"} ${f.atual && d < f.dHoje ? "ja" : ""}" title="${esc(tip)}"><span>dia ${d}</span><b>${R0(v)}</b><em>+${R0(ent)}<br>−${R0(pag)}</em>${v < -0.005 ? `<i>faltam ${R0(-v)}</i>` : ""}</div>`; });
+    return `<div class="marcos"><div class="mc-t">Sobra acumulada no fim do dia (tudo o que entrou − contas pagas em dia)</div><div class="mc-g">${cards.join("")}</div><div class="mc-l">+ entrou no período · − contas que venceram no período</div></div>`;
+  }
+  function renderFluxoDia(k) {
+    const box = $("fluxoDia"); if (!box) return; const f = fluxoDiario(k), cor = pal(), mm = k.slice(5);
+    const L = f.dias.map((x) => pad(x.d) + "/" + mm);
+    const prox = f.ev.filter((e) => !f.atual || e.d >= f.dHoje).sort((a, b) => a.d - b.d || b.v - a.v);
+    let run = f.atual ? f.hojeS : f.ini; const lista = prox.map((e) => { run += e.v; return Object.assign({ depois: run }, e); });
+    const neg = f.min && f.min.saldo < -0.005;
+    $("fdInfo").innerHTML = `<div class="fd-k"><span>Início do mês</span><b>${R(f.ini)}</b><em>${f.si.manual ? "sobra do mês anterior" : "começa do zero"}</em></div>
+      ${f.atual ? `<div class="fd-k"><span>Hoje (${pad(f.dHoje)}/${mm})</span><b class="${f.hojeS < -0.005 ? "neg" : ""}">${R(f.hojeS)}</b><em>entrou − pago até ontem</em></div>` : ""}
+      <div class="fd-k"><span>Menor sobra</span><b class="${neg ? "neg" : ""}">${f.min ? R(f.min.saldo) : "—"}</b><em>${f.min ? "em " + pad(f.min.d) + "/" + mm : ""}</em></div>
+      <div class="fd-k"><span>Sobra no fim do mês</span><b class="${f.fim < 0 ? "neg" : "pos"}">${R(f.fim)}</b><em>antes do débito/Pix do dia a dia</em></div>
+      <label class="fd-in">Sobrou do mês anterior (opcional) <input id="fdSaldo" type="number" step="0.01" inputmode="decimal" value="${f.si.manual ? f.si.v : ""}" placeholder="R$ 0,00"></label>`;
+    const ds1 = ds("Entradas", f.dias.map((x) => (x.ent ? Math.round(x.ent * 100) / 100 : null)), cor[1], { stack: "m", datalabels: { display: false } });
+    const ds2 = ds("Saídas", f.dias.map((x) => (x.sai ? Math.round(x.sai * 100) / 100 : null)), cor[5], { stack: "m", datalabels: { display: false } });
+    const ds3 = { type: "line", label: "Sobra acumulada (contas pagas em dia)", data: f.dias.map((x) => x.saldo), borderColor: cor[0], backgroundColor: cor[0], borderWidth: 3, stepped: true, pointRadius: f.dias.map((x) => (x.ev.length ? 4 : 0)), pointBackgroundColor: f.dias.map((x) => (x.saldo != null && x.saldo < 0 ? css("--bad") : cor[0])), pointBorderColor: css("--surface-solid"), pointBorderWidth: 2, spanGaps: false, order: 0,
+      datalabels: { align: "top", offset: 4, color: (c) => (c.dataset.data[c.dataIndex] < 0 ? css("--bad") : css("--ink2")), font: { size: 10, weight: "700" }, display: (c) => { const x = f.dias[c.dataIndex]; return !isMobile() && x.ev.length && Math.abs(x.ent + x.sai) > 150; }, formatter: (v) => R0(v) } };
+    const o = baseOpts(false, (v) => R0(v));
+    o.scales.x.stacked = true; o.scales.y.stacked = false; o.scales.x.ticks = { color: css("--ink2"), maxRotation: 0, autoSkip: true, autoSkipPadding: 8, callback: (v, i) => L[i].slice(0, 2) };
+    o.plugins.tooltip.callbacks = { title: (it) => "Dia " + L[it[0].dataIndex], label: () => null,
+      afterBody: (it) => { const x = f.dias[it[0].dataIndex], out = x.ev.map((e) => (e.v > 0 ? "▲ " : "▼ ") + e.n + ": " + R(Math.abs(e.v)) + (e.feito ? " ✓" : e.vencida ? " (vencida)" : ""));
+        out.push("", "Sobra acumulada no fim do dia: " + R(x.saldo)); return out.length ? out : ["Sem movimento"]; } };
+    o.plugins.tooltip.filter = (t) => t.datasetIndex === 0; o.interaction = { mode: "index", intersect: false };
+    if (f.atual) o.plugins.annotation = undefined;
+    const ch = draw("cFluxoDia", "bar", L, [ds3, ds1, ds2], o);
+    ch.$hoje = f.atual ? f.dHoje - 1 : null;
+    $("fdLista").innerHTML = lista.length ? lista.slice(0, 10).map((e) => `<div class="fd-ev ${e.v > 0 ? "in" : "out"} ${e.vencida ? "venc" : ""}"><span class="d">${pad(e.d)}/${mm}</span><span class="n">${esc(e.n)}${e.vencida ? " · vencida" : ""}</span><span class="v">${e.v > 0 ? "+" : "−"} ${R(Math.abs(e.v))}</span><span class="s ${e.depois < 0 ? "neg" : ""}">saldo ${R(e.depois)}</span></div>`).join("") + (lista.length > 10 ? `<p class="muted small">+ ${lista.length - 10} movimento(s) no gráfico</p>` : "")
+      : `<p class="muted small">Nenhum movimento previsto para o resto do mês.</p>`;
+    $("fdAviso").innerHTML = neg ? `<span class="icon-bad">Em ${pad(f.min.d)}/${mm} o que entrou até ali não cobre as contas que vencem até esse dia: faltam ${R(-f.min.saldo)}. Só fica negativo quando não tem dinheiro para pagar em dia.</span>` : `<span class="icon-ok">Todas as contas do mês cabem no que entra até o vencimento de cada uma.</span>`;
+    const inp = $("fdSaldo"); inp.onchange = () => { try { inp.value === "" ? localStorage.removeItem("saldo-inicio") : localStorage.setItem("saldo-inicio", inp.value); } catch (_) {} renderResumo(k); };
+  }
+  // linha vertical "hoje" no fluxo diário
+  Chart.register({ id: "linhaHoje", afterDatasetsDraw(ch) { if (ch.$hoje == null || !ch.scales.x) return; const x = ch.scales.x.getPixelForValue(ch.$hoje), a = ch.chartArea, c = ch.ctx;
+    c.save(); c.strokeStyle = css("--warn"); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.beginPath(); c.moveTo(x, a.top); c.lineTo(x, a.bottom); c.stroke();
+    c.setLineDash([]); c.fillStyle = css("--warn"); c.font = "600 11px Inter, sans-serif"; c.fillText("hoje", x + 4, a.top + 12); c.restore(); } });
 
   // ================= TARIFAS DA CEMIG =================
   const ORD_B = ["verde", "amarela", "vermelha 1", "vermelha 2"];

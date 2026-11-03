@@ -536,3 +536,47 @@ footer img{vertical-align:-4px;margin-right:4px}
 .sit>.exp-bar,.hero>.exp-bar{position:absolute}
 .tl{flex-wrap:wrap;overflow:visible}.tl-i{flex:1 1 180px;min-width:0}
 .zoomov .zb>.exp-bar{position:sticky;bottom:8px;left:auto;margin:8px 0 0 auto;width:max-content;opacity:.9}
+
+/* fluxo diário */
+.fd-info{display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin:6px 0 4px}
+.fd-k{display:flex;flex-direction:column;padding:8px 14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);min-width:150px}
+.fd-k span{font-size:12px;color:var(--muted)}.fd-k b{font-size:19px;font-weight:800}.fd-k em{font-style:normal;font-size:11.5px;color:var(--muted)}
+.fd-k b.neg{color:var(--bad)}.fd-k b.pos{color:var(--good)}
+.fd-in{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);margin-left:auto}
+.fd-in input{width:150px}
+.ov-c.fd .chart.fd-chart,.fd .chart.fd-chart{height:340px}
+.fd-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.fd-ev{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"d n v" "d s s";column-gap:10px;padding:8px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);border-left:4px solid var(--s6);font-size:13px}
+.fd-ev.in{border-left-color:var(--s2)}.fd-ev.venc{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--surface-2))}
+.fd-ev .d{grid-area:d;font-weight:800;color:var(--ink2);align-self:center}.fd-ev .n{grid-area:n;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fd-ev .v{grid-area:v;font-weight:700}.fd-ev.in .v{color:var(--good)}.fd-ev.out .v{color:var(--bad)}
+.fd-ev .s{grid-area:s;font-size:12px;color:var(--muted);text-align:right}.fd-ev .s.neg{color:var(--bad);font-weight:700}
+@media (max-width:700px){.fd-in{margin-left:0;width:100%}.fd-in input{width:100%}.fd-k{flex:1 1 40%;min-width:0}.ov-c.fd .chart.fd-chart,.fd .chart.fd-chart{height:280px}.fd-lista{grid-template-columns:1fr}}
+.fd-ev .n{white-space:normal;overflow:visible;line-height:1.3}
+.fd-ev .n{text-align:left;align-self:center}
+.fd-ev{grid-template-areas:"d n v" "d n s";align-items:center}
+
+.marcos{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.18);text-align:left}
+.mc-t{font-size:11.5px;opacity:.75;margin-bottom:6px}
+.mc-g{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.mc{display:flex;flex-direction:column;align-items:center;padding:5px 6px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);min-width:62px}
+.mc span{font-size:11px;opacity:.75}.mc b{font-size:13px;font-weight:800;white-space:nowrap}
+.mc.pos b{color:#7bf0b0}.mc.neg b{color:#ffb3c0}.mc.neg{border-color:rgba(255,107,129,.5);background:rgba(255,107,129,.12)}.mc.pass b{opacity:.55;font-weight:600}
+@media (max-width:700px){.mc{min-width:0;padding:5px 2px}.mc b{font-size:11.5px}}
+
+.mc em{font-style:normal;font-size:10.5px;opacity:.75;white-space:nowrap}
+.mc i{font-style:normal;font-size:10.5px;font-weight:700;color:#ffb3c0}
+.mc-l{font-size:10.5px;opacity:.6;margin-top:5px}
+.sit-res{max-width:560px}
+@media (max-width:700px){.mc em{font-size:9.5px}.sit-res{max-width:none}}
+.sit-res{margin-left:auto}
+.mc.ja{opacity:.75}
+
+.checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.ck{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);max-width:420px}
+.ck .ic{font-size:18px}
+.ck b{display:block;font-size:13.5px;color:#fff}.ck small{display:block;font-size:11.5px;opacity:.75;line-height:1.35}
+.ck.ok{border-color:rgba(61,220,132,.45)}.ck.bad{border-color:rgba(255,107,129,.6);background:rgba(255,107,129,.12)}.ck.warn{border-color:rgba(251,191,36,.5)}
+@media (max-width:700px){.ck{max-width:none;width:100%}}
+.sit-h{flex-wrap:nowrap}.sit-h>div:first-child{flex:1 1 auto;min-width:0}.sit-res{flex:0 0 520px}.checks .ck{flex:1 1 260px;max-width:none}
+@media (max-width:1100px){.sit-h{flex-wrap:wrap}.sit-res{flex:1 1 100%}}
