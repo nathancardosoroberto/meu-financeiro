@@ -248,6 +248,7 @@
     if (F.item) t.push(F.item.slice(2)); if (F.unid === "pct") t.push("em %");
     $("fAtivos").textContent = t.join(" · ");
   }
+  $("recPessoa").addEventListener("change", (e) => { RECP = e.target.value; try { localStorage.setItem("rec-pessoa", RECP); } catch (_) {} renderDividas(); });
   $("cabeValor").addEventListener("input", () => renderCabe(F.mes));
   $("gastoManual").addEventListener("input", (e) => { const kk = addM(F.mes, -1); try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + kk) : localStorage.setItem("gasto-" + kk, v); } catch (_) {} renderGeral(true); });
 
@@ -559,11 +560,12 @@
   function renderDividas() {
     const k = F.mes, i = idx(k), ent = DATA.proj.entradas[i] || 0, cor = pal();
     // a receber
-    let rc = receber(k); if (F.cartao) rc = rc.filter((r) => r.origem.includes(F.cartao) || (F.cartao.startsWith("Conta") && r.origem === "Conta fixa"));
+    renderRecPessoaSel();
+    let rc = receber(k).filter((r) => passaPessoa(r.pessoa)); if (F.cartao) rc = rc.filter((r) => r.origem.includes(F.cartao) || (F.cartao.startsWith("Conta") && r.origem === "Conta fixa"));
     const porPessoa = {}; rc.forEach((r) => (porPessoa[r.pessoa] = (porPessoa[r.pessoa] || 0) + r.valor));
     $("rResumo").textContent = Object.entries(porPessoa).map(([p, v]) => p + ": " + R(v)).join(" · ") || "nada a receber";
     rc.sort((a, b) => a.pessoa.localeCompare(b.pessoa) || (a.quando || 0) - (b.quando || 0));
-    const sobras = statusReceber(k, rc);
+    const sobras = statusReceber(k, rc).filter((s) => passaPessoa(s.pessoa));
     rc.sort((a, b) => (a.st === "pago") - (b.st === "pago") || a.pessoa.localeCompare(b.pessoa) || (a.quando || 0) - (b.quando || 0));
     const tag = (r) => r.st === "pago" ? `<span class="tag good">Pago${r.dataPago ? " " + r.dataPago.split("-").reverse().slice(0, 2).join("/") : ""}</span>` : r.st === "parcial" ? `<span class="tag">Parcial: falta ${R(r.valor - r.pago)}</span>` : `<span class="tag bad">Pendente</span>`;
     const tot = {}; rc.forEach((r) => { const o = tot[r.pessoa] || (tot[r.pessoa] = { v: 0, p: 0 }); o.v += r.valor; o.p += r.pago; });
@@ -599,7 +601,7 @@
       [ds("Ainda a pagar", dvc.map((d) => d.aPagar), dvc.map((d) => cor[Math.max(0, DATA.cartoes.indexOf(d.paga)) % 6]))], baseOpts(false, (v) => R0(v), { indexAxis: "y", animation: false }));
     ch.options.plugins.legend.display = false; ch.update();
     renderCompras(k, "tLanc", "lResumo");
-    renderContas(k); renderRecebidos(k); renderLibera(k); renderPrevReal();
+    renderContas(k); renderRecebidos(k); renderDevPessoa(k); renderLibera(k); renderPrevReal();
   }
 
   // ---------- contas do mês: pago x pendente ----------
@@ -740,11 +742,43 @@
       atras[p] = DATA.meses.filter((m) => m < REF.mes).reduce((s, m) => s + Math.max(0, (devidoPessoa(m)[p] || 0) - ((DATA.recebido[p] || {})[m] || 0)), 0); });
     return { mes, atras };
   }
+  let RECP = ""; try { RECP = localStorage.getItem("rec-pessoa") || ""; } catch (_) {}
+  const passaPessoa = (p) => !RECP || p === RECP;
+  function pessoasTodas() {
+    const s = new Set(); const add = (p) => { if (p && p !== "-") s.add(p); };
+    DATA.fixos.forEach((f) => { add(f.q1); add(f.q2); }); DATA.dividas.forEach((d) => { add(d.q1); add(d.q2); }); DATA.lanc.forEach((l) => { add(l.q1); add(l.q2); }); DATA.recItens.forEach((r) => add(r.pessoa));
+    return [...s].sort();
+  }
+  function renderRecPessoaSel() {
+    const el = $("recPessoa"), ps = pessoasTodas(); if (RECP && !ps.includes(RECP)) RECP = "";
+    el.innerHTML = `<option value="">Todas as pessoas</option>` + ps.map((p) => `<option ${p === RECP ? "selected" : ""}>${esc(p)}</option>`).join("");
+  }
+  // dívidas das pessoas comigo (itens com fim): parcelas pagas x pendentes
+  function renderDevPessoa(k) {
+    const n = (t) => txt(t).toLowerCase().replace(/\s+/g, " "), itens = [];
+    const add = (p, v, desc, ini, fim, tot) => { if (!p || p === "-" || !(v > 0.004) || !fim) return; if (!passaPessoa(p)) return;
+      const N = tot || diffM(ini, fim) + 1, i0 = tot ? addM(fim, -(N - 1)) : ini || addM(fim, -(N - 1));
+      itens.push({ p, v, desc, ini: i0, fim, N }); };
+    DATA.dividas.forEach((d) => { add(d.q1, d.r1, d.desc, d.ini, d.fim, d.totalParc); add(d.q2, d.r2, d.desc, d.ini, d.fim, d.totalParc); });
+    DATA.lanc.filter((l) => l.parcelado).forEach((l) => { add(l.q1, l.r1, l.desc, l.ini, l.fim, l.n); add(l.q2, l.r2, l.desc, l.ini, l.fim, l.n); });
+    const rows = itens.map((it) => {
+      let antes = 0; for (let m = it.ini; m <= it.fim; m = addM(m, 1)) if (m < DATA.planIni) antes++;
+      const rec = DATA.recItens.filter((r) => n(r.pessoa) === n(it.p) && n(r.item) === n(it.desc)).reduce((s, r) => s + r.valor, 0);
+      const pagas = Math.min(it.N, antes + Math.floor((rec + 0.05) / it.v)), pend = it.N - pagas;
+      let devidas = 0; for (let m = it.ini; m <= it.fim && m <= k; m = addM(m, 1)) devidas++;
+      const st = pend === 0 ? `<span class="tag good">Quitado</span>` : pagas > devidas ? `<span class="tag good">Adiantado ${pagas - devidas}</span>` : pagas < devidas ? `<span class="tag bad">Atrasado ${devidas - pagas}</span>` : `<span class="tag">Em dia</span>`;
+      const falta = pend ? (diffM(k, it.fim) >= 0 ? `${lab(it.fim)} (${diffM(k, it.fim) ? "faltam " + (diffM(k, it.fim) + 1) + " meses" : "último mês"})` : lab(it.fim)) : "—";
+      return { it, pagas, pend, pago: antes * it.v + rec, pendV: Math.max(0, it.N * it.v - antes * it.v - rec), st, falta };
+    }).sort((a, b) => a.it.p.localeCompare(b.it.p) || (a.pend === 0) - (b.pend === 0) || a.it.fim.localeCompare(b.it.fim));
+    $("tDevPessoa").innerHTML = `<tr><th>Pessoa</th><th>Dívida</th><th>Parcela</th><th>Pagas</th><th>Pendentes</th><th>Total pago</th><th>Total pendente</th><th>Última parcela</th><th>Situação</th></tr>` +
+      (rows.map((r) => `<tr class="${r.pend === 0 ? "fora" : ""}"><td>${esc(r.it.p)}</td><td style="text-align:left">${esc(r.it.desc)}</td><td>${R(r.it.v)}</td><td>${r.pagas} de ${r.it.N}</td><td>${r.pend}</td><td class="pos">${R(r.pago)}</td><td class="${r.pendV > 0.005 ? "neg" : ""}">${R(r.pendV)}</td><td>${r.falta}</td><td>${r.st}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">Nenhuma dívida parcelada${RECP ? " de " + esc(RECP) : ""}.</td></tr>`) +
+      (rows.length > 1 ? `<tr class="total"><td>Total</td><td></td><td></td><td></td><td></td><td>${R(rows.reduce((s, r) => s + r.pago, 0))}</td><td>${R(rows.reduce((s, r) => s + r.pendV, 0))}</td><td></td><td></td></tr>` : "");
+  }
   function renderRecebidos(k) {
     const { mes, atras } = pendencias(k);
     $("tRecebido").innerHTML = `<tr><th>Pessoa</th><th>Devido em ${lab(k)}</th><th>Recebido</th><th>Pendente</th><th>Atrasado (meses anteriores)</th></tr>` +
-      Object.entries(mes).filter(([p, o]) => o.d || o.r || atras[p]).map(([p, o]) => `<tr><td>${esc(p)}</td><td>${R(o.d)}</td><td class="${o.r >= o.d - 0.005 && o.d ? "pos" : ""}">${R(o.r)}</td><td class="${o.pend > 0.005 ? "neg" : ""}">${R(o.pend)}</td><td class="${atras[p] > 0.005 ? "neg" : ""}">${R(atras[p])}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nada a receber neste mês.</td></tr>`;
-    const tA = Object.values(atras).reduce((s, v) => s + v, 0);
+      Object.entries(mes).filter(([p, o]) => passaPessoa(p) && (o.d || o.r || atras[p])).map(([p, o]) => `<tr><td>${esc(p)}</td><td>${R(o.d)}</td><td class="${o.r >= o.d - 0.005 && o.d ? "pos" : ""}">${R(o.r)}</td><td class="${o.pend > 0.005 ? "neg" : ""}">${R(o.pend)}</td><td class="${atras[p] > 0.005 ? "neg" : ""}">${R(atras[p])}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">Nada a receber neste mês.</td></tr>`;
+    const tA = Object.entries(atras).filter(([p]) => passaPessoa(p)).reduce((s, [, v]) => s + v, 0);
     $("recAviso").innerHTML = tA > 0.005 ? `<span class="icon-bad">Tem ${R(tA)} de reembolso atrasado. Cobre e marque no bloco RECEBIDO da aba Reembolsos.</span>` : `<span class="muted small">Quando alguém te pagar, preencha o bloco RECEBIDO da aba Reembolsos da planilha.</span>`;
   }
   function renderLibera(k) {

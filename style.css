@@ -209,3 +209,5 @@ body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body
 
 .vr-prox{background:var(--barbg);border-radius:10px;padding:10px 12px;margin:4px 0 12px;font-size:14px;color:var(--ink2)}
 #tRend tr.sel td{background:var(--barbg);font-weight:600}
+
+.cabe-in select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit}

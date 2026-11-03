@@ -6,7 +6,7 @@
 <title>Meu Financeiro</title>
 <link rel="icon" href="data:,">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 </head>
 <body class="travado">
 <header class="top">
@@ -146,11 +146,15 @@
       <div id="cBody"></div>
     </section>
     <section class="card">
-      <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><p class="muted small" id="rResumo"></p></div>
+      <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><label class="muted small cabe-in">Pessoa <select id="recPessoa"></select></label></div>
+      <p class="muted small" id="rResumo"></p>
       <div class="tblwrap"><table class="tbl" id="tReceber"></table></div>
       <h3 class="h3">Recebido x pendente</h3>
       <div class="tblwrap"><table class="tbl" id="tRecebido"></table></div>
       <p id="recAviso"></p>
+      <h3 class="h3">Dívidas parceladas comigo: quanto já pagaram e quanto falta</h3>
+      <div class="tblwrap"><table class="tbl" id="tDevPessoa"></table></div>
+      <p class="muted small">Parcelas de antes de out/26 (início da planilha) contam como pagas. Contas fixas sem fim (aluguel, internet…) ficam só na tabela do mês acima.</p>
     </section>
     <section class="card">
       <div class="row-between"><h2>Contas fixas do mês</h2><p class="muted small" id="fResumo"></p></div>
