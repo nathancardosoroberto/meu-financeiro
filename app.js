@@ -544,7 +544,7 @@
   function statusReceber(k, rc) {
     const n = (t) => txt(t).toLowerCase().replace(/\s+/g, " "), pool = DATA.recItens.filter((r) => r.mes === k).map((r) => Object.assign({ resto: r.valor }, r));
     rc.forEach((r) => { let pago = 0, dt = ""; pool.filter((p) => n(p.pessoa) === n(r.pessoa) && n(p.item) === n(r.base) && p.resto > 0.004).forEach((p) => { const u = Math.min(p.resto, r.valor - pago); if (u > 0) { p.resto -= u; pago += u; dt = dt || p.data; } });
-      r.pago = pago; r.dataPago = dt; r.st = pago >= r.valor - 0.015 ? "pago" : pago > 0.004 ? "parcial" : "pendente"; });
+      r.pago = pago; r.dataPago = dt; r.st = pago >= r.valor - 0.1 ? "pago" : pago > 0.004 ? "parcial" : "pendente"; });
     return pool.filter((p) => p.resto > 0.015);
   }
   function renderCompras(k, tid, rid) {
@@ -777,47 +777,70 @@
   }
   // extrato para enviar à pessoa (mês a mês)
   let EXT_OPEN = false;
+  function carregaLib(nome, cdn) { return new Promise((ok, err) => { if (window.html2canvas) return ok();
+    const tries = ["vendor/" + nome, nome, cdn]; (function t(i) { if (i >= tries.length) return err(new Error("lib")); const s = document.createElement("script"); s.src = tries[i]; s.onload = () => ok(); s.onerror = () => t(i + 1); document.head.appendChild(s); })(0); }); }
+  async function extratoImagem(modo) {
+    const el = $("extrato"), st = $("extStatus");
+    try { st.textContent = "Gerando imagem…"; await carregaLib("html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+      el.classList.add("ext-cap");
+      const alvo = el.querySelector(".ext-docs"); const cv = await window.html2canvas(alvo, { width: alvo.scrollWidth, windowWidth: alvo.scrollWidth + 40, backgroundColor: getComputedStyle(document.body).backgroundColor, scale: 2 });
+      el.classList.remove("ext-cap");
+      const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+      if (modo === "copiar" && navigator.clipboard && window.ClipboardItem) { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); st.textContent = "Imagem copiada! É só colar no WhatsApp."; }
+      else { const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = "extrato-" + (RECP || "todos").toLowerCase() + ".png"; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); st.textContent = modo === "copiar" ? "Este navegador não deixa copiar: baixei a imagem." : "Imagem baixada."; }
+    } catch (e) { el.classList.remove("ext-cap"); st.textContent = "Não consegui gerar a imagem (" + e.message + "). Use o print ou o PDF."; }
+  }
   function renderExtrato(k) {
     const box = $("extrato"); $("extBtn").textContent = EXT_OPEN ? "Fechar extrato" : "📄 Extrato para enviar";
     if (!EXT_OPEN) { box.hidden = true; box.innerHTML = ""; return; } box.hidden = false;
-    const ms = DATA.meses.filter((m) => m >= k);
+    const ini = addM(k, -1), fimJ = addM(k, 6), ms = DATA.meses.filter((m) => m >= ini);
     const porMes = ms.map((m) => { const rc = receber(m); statusReceber(m, rc); return { m, rc }; });
-    const pessoas = RECP ? [RECP] : [...new Set(porMes.flatMap((x) => x.rc.map((r) => r.pessoa)))].sort();
-    const hoje = new Date();
-    box.innerHTML = pessoas.map((p) => {
+    const pessoas = RECP ? [RECP] : [...new Set(porMes.filter((x) => x.m <= fimJ).flatMap((x) => x.rc.map((r) => r.pessoa)))].sort();
+    const hoje = new Date(), cor = pal();
+    const estim = (b) => DATA.fixos.some((f) => f.desc === b && !f.fim && /aluguel|condom|luz|energia/i.test(b));
+    const fixo = (b) => DATA.fixos.some((f) => f.desc === b && !f.fim);
+    const curto = (b) => b.replace(/\s*—.*$/, "").replace(/\s*\((anual|ingressos)[^)]*\)/gi, "").replace(/\s*\(\w{3}\/\d{2}\)$/, "").trim();
+    const charts = [];
+    box.innerHTML = `<div class="ext-docs">` + pessoas.map((p, pi) => {
       const linhas = porMes.map((x) => ({ m: x.m, it: x.rc.filter((r) => r.pessoa === p) })).filter((x) => x.it.length);
-      // itens com fim x recorrentes
-      const itens = {}; linhas.forEach((x) => x.it.forEach((r) => { const o = itens[r.base] || (itens[r.base] = { base: r.base, ini: x.m, fim: x.m, valores: [], n: 0, pend: 0, origem: r.origem });
+      const itens = {}; linhas.forEach((x) => x.it.forEach((r) => { const o = itens[r.base] || (itens[r.base] = { base: r.base, fim: x.m, valores: [], n: 0, pend: 0 });
         o.fim = x.m; if (r.valor - (r.pago || 0) > 0.015) o.n++; o.valores.push(r.valor); o.pend += r.valor - (r.pago || 0); }));
-      const fixo = (b) => DATA.fixos.some((f) => f.desc === b && !f.fim);
-      const ultimo = linhas.length ? linhas[linhas.length - 1].m : k;
       const finitos = Object.values(itens).filter((o) => !fixo(o.base)), recorr = Object.values(itens).filter((o) => fixo(o.base));
       const totFin = finitos.reduce((s, o) => s + o.pend, 0);
-      const ultFin = finitos.reduce((a2, o) => (o.fim > a2 ? o.fim : a2), addM(k, 2));
-      const mesesTab = linhas.filter((x) => x.m <= ultFin);
-      const curto = (b) => b.replace(/\s*—.*$/, "").replace(/\s*\((anual|ingressos)[^)]*\)/gi, "").replace(/\s*\(\w{3}\/\d{2}\)$/, "").trim();
-      const cols = [...new Set(mesesTab.flatMap((x) => x.it.map((r) => r.base)))].sort((a2, b2) => fixo(a2) - fixo(b2));
-      const nomeCol = {}; cols.forEach((c) => (nomeCol[c] = curto(c)));
-      const uniq = [...new Set(cols.map((c) => nomeCol[c]))];
+      const jan = linhas.filter((x) => x.m <= fimJ);
+      const cols = [...new Set(jan.flatMap((x) => x.it.map((r) => r.base)))].sort((a2, b2) => fixo(a2) - fixo(b2));
+      const nomeCol = {}; cols.forEach((c) => (nomeCol[c] = curto(c))); const uniq = [...new Set(cols.map((c) => nomeCol[c]))];
+      const resumoM = jan.map((x) => { const tm = x.it.reduce((s, r) => s + r.valor, 0), pg = x.it.reduce((s, r) => s + (r.st === "pago" ? r.valor : Math.min(r.valor, r.pago || 0)), 0); return { m: x.m, tm, pg, pend: Math.max(0, tm - pg) }; });
+      const totJan = resumoM.reduce((s, x) => s + x.pend, 0), pagoJan = resumoM.reduce((s, x) => s + x.pg, 0);
+      const temEst = jan.some((x) => x.it.some((r) => estim(r.base) && r.st !== "pago"));
+      charts.push({ id: "extC" + pi, resumoM });
       return `<div class="ext-doc">
-        <div class="ext-h"><div><h3>Valores a receber — ${esc(p)}</h3><div class="muted small">De ${lab(k)} até ${lab(ultFin)} · gerado em ${fmtD(hoje)}</div></div>
-          <div class="ext-tot"><div class="l">Parcelas com fim: total que falta</div><div class="v">${R(totFin)}</div></div></div>
+        <div class="ext-h"><div><h3>Valores a receber — ${esc(p)}</h3><div class="muted small">${lab(jan.length ? jan[0].m : ini)} a ${lab(jan.length ? jan[jan.length - 1].m : fimJ)} · gerado em ${fmtD(hoje)}</div></div>
+          <div class="ext-tots"><div class="ext-tot"><div class="l">Já pago no período</div><div class="v pos">${R(pagoJan)}</div></div>
+          <div class="ext-tot"><div class="l">Falta pagar no período${temEst ? "*" : ""}</div><div class="v neg">${R(totJan)}</div></div></div></div>
+        <div class="ext-chart"><canvas id="extC${pi}"></canvas></div>
         <div class="tblwrap"><table class="tbl ext-t"><tr><th>Mês</th>${uniq.map((u) => `<th>${esc(u)}</th>`).join("")}<th>Total do mês</th><th>Situação</th></tr>` +
-        mesesTab.map((x) => { const tm = x.it.reduce((s, r) => s + r.valor, 0), pg = x.it.reduce((s, r) => s + (r.pago || 0), 0);
-          const cel = (u) => { const rs = x.it.filter((r) => nomeCol[r.base] === u); if (!rs.length) return "—"; const v = rs.reduce((s, r) => s + r.valor, 0), par = rs.map((r) => (r.item.match(/\((\d+\/\d+)\)/) || [])[1]).filter(Boolean)[0];
-            return R(v) + (par ? `<div class="muted small">${par}</div>` : ""); };
-          const st = pg >= tm - 0.015 ? '<span class="tag good">Pago</span>' : pg > 0.004 ? `<span class="tag">Falta ${R(tm - pg)}</span>` : x.m < mesAtual() ? '<span class="tag bad">Atrasado</span>' : "a pagar";
-          return `<tr><td><b>${lab(x.m)}</b></td>${uniq.map((u) => `<td>${cel(u)}</td>`).join("")}<td><b>${R(tm)}</b></td><td>${st}</td></tr>`; }).join("") +
-        `</table></div>
+        jan.map((x, n) => { const rm = resumoM[n];
+          const cel = (u) => { const rs = x.it.filter((r) => nomeCol[r.base] === u); if (!rs.length) return "—"; const v = rs.reduce((s, r) => s + r.valor, 0), pago = rs.every((r) => r.st === "pago"),
+            par = rs.map((r) => (r.item.match(/\((\d+\/\d+)\)/) || [])[1]).filter(Boolean)[0], est = rs.some((r) => estim(r.base)) && !pago;
+            return `<span class="${pago ? "ok" : "pend"}">${R(v)}${est ? "*" : ""}</span>` + (par ? `<div class="muted small">${par}</div>` : ""); };
+          const st = rm.pend < 0.015 ? '<span class="tag good">Pago</span>' : rm.pg > 0.004 ? `<span class="tag bad">Falta ${R(rm.pend)}</span>` : x.m < mesAtual() ? '<span class="tag bad">Atrasado</span>' : '<span class="tag bad">Pendente</span>';
+          return `<tr class="${x.m === k ? "sel" : ""}"><td><b>${lab(x.m)}</b></td>${uniq.map((u) => `<td>${cel(u)}</td>`).join("")}<td><b>${R(rm.tm)}</b></td><td>${st}</td></tr>`; }).join("") +
+        `<tr class="total"><td>Total</td>${uniq.map(() => "<td></td>").join("")}<td>${R(resumoM.reduce((s, x) => s + x.tm, 0))}</td><td><span class="pend">falta ${R(totJan)}</span></td></tr></table></div>
+        <p class="ext-leg"><span class="ok">■ verde = pago</span> · <span class="pend">■ vermelho = pendente</span>${temEst ? " · * valor estimado (aluguel, condomínio e luz mudam todo mês; vale o valor da conta quando chegar)" : ""}</p>
         <h4>Resumo por item</h4>
         <table class="tbl ext-t"><tr><th>Item</th><th>Valor por mês</th><th>Até</th><th>Meses restantes</th><th>Total restante</th></tr>` +
-        finitos.filter((o) => o.pend > 0.5).map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[0])}</td><td><b>${lab(o.fim)}</b> (última)</td><td>${o.n}</td><td><b>${R(o.pend)}</b></td></tr>`).join("") +
-        recorr.map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[0])}</td><td>todo mês (sem fim)</td><td>—</td><td>${R(o.valores[0])}/mês</td></tr>`).join("") +
-        `</table>
-        ${recorr.length ? `<p class="muted small">Contas da casa (aluguel, condomínio, luz, internet) usam o valor previsto até a conta do mês chegar; o valor real pode variar. Elas continuam todo mês depois de ${lab(ultFin)}.</p>` : ""}
+        finitos.filter((o) => o.pend > 0.5).map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[o.valores.length - 1])}</td><td><b>${lab(o.fim)}</b> (última)</td><td>${o.n}</td><td class="pend"><b>${R(o.pend)}</b></td></tr>`).join("") +
+        recorr.map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[o.valores.length - 1])}${estim(o.base) ? "*" : ""}</td><td>todo mês (sem fim)</td><td>—</td><td>${R(o.valores[o.valores.length - 1])}/mês</td></tr>`).join("") +
+        `</table>${finitos.some((o) => o.pend > 0.5) ? `<p class="muted small">Parcelas com fim: falta <b>${R(totFin)}</b> no total até a última parcela.</p>` : ""}
       </div>`;
-    }).join("") + `<div class="ext-act"><button type="button" class="btn ghost sm" id="extPrint">Imprimir / salvar PDF</button></div>`;
+    }).join("") + `</div><div class="ext-act"><span class="muted small" id="extStatus"></span><button type="button" class="btn sm" id="extCopy">📋 Copiar imagem</button><button type="button" class="btn ghost sm" id="extPng">Baixar imagem</button><button type="button" class="btn ghost sm" id="extPrint">Imprimir / salvar PDF</button></div>`;
+    const ok = css("--good"), bad = css("--bad");
+    charts.forEach((c) => { const ch = draw(c.id, "bar", c.resumoM.map((x) => lab(x.m)), [ds("Pago", c.resumoM.map((x) => Math.round(x.pg * 100) / 100), ok), ds("Pendente", c.resumoM.map((x) => Math.round(x.pend * 100) / 100), bad)], baseOpts(true, (v) => R0(v)));
+      ch.options.animation = false; ch.update(); });
     $("extPrint").addEventListener("click", () => { document.body.classList.add("print-ext"); window.print(); setTimeout(() => document.body.classList.remove("print-ext"), 500); });
+    $("extCopy").addEventListener("click", () => extratoImagem("copiar"));
+    $("extPng").addEventListener("click", () => extratoImagem("baixar"));
   }
   function renderRecebidos(k) {
     const { mes, atras } = pendencias(k);

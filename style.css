@@ -222,3 +222,18 @@ body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body
 .ext-t tr.ext-sub td{font-size:13px;color:var(--ink2);background:var(--barbg)}
 .ext-act{display:flex;justify-content:flex-end}
 @media print{body.print-ext *{visibility:hidden} body.print-ext #extrato, body.print-ext #extrato *{visibility:visible} body.print-ext #extrato{position:absolute;left:0;top:0;width:100%} body.print-ext .ext-act{display:none}}
+
+.ext-tots{display:flex;gap:18px}
+.ext-tot .v.pos{color:var(--good)} .ext-tot .v.neg{color:var(--bad)}
+.ext-chart{position:relative;height:200px;margin:6px 0 10px}
+.ext-t .ok{color:var(--good);font-weight:600} .ext-t .pend,.ext-leg .pend{color:var(--bad);font-weight:600} .ext-leg .ok{color:var(--good);font-weight:600}
+.ext-t tr.sel td{background:var(--barbg)}
+.ext-leg{font-size:12.5px;margin:6px 0}
+.ext-act{gap:8px;align-items:center}
+.ext-cap .tblwrap{overflow:visible}
+.ext-docs{background:var(--bg)}
+@media print{.ext-chart canvas{max-width:100%}}
+
+.ext-doc .zoom{display:none}
+.ext-cap .ext-docs{width:max-content;min-width:100%}
+.ext-cap .ext-doc{width:max-content;min-width:900px}
