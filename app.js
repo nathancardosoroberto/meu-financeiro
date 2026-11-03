@@ -1,7 +1,9 @@
-/* Meu Financeiro — dashboard que lê a planilha Planejamento_Financeiro (Google Planilhas publicado como .xlsx) */
+/* Controle Financeiro — dashboard que lê a planilha Planejamento_Financeiro (Google Planilhas publicado como .xlsx) */
 (function () {
   "use strict";
   Chart.register(ChartDataLabels);
+  Chart.defaults.font.family = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
+  Chart.defaults.elements.line.tension = 0.3; Chart.defaults.elements.line.borderCapStyle = "round";
   const $ = (id) => document.getElementById(id);
   const MESES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
   const MESESL = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
@@ -32,10 +34,12 @@
   const diffM = (a, b) => { const [ya, ma] = a.split("-").map(Number), [yb, mb] = b.split("-").map(Number); return (yb - ya) * 12 + (mb - ma); };
   const fmtD = (d) => pad(d.getDate()) + "/" + pad(d.getMonth() + 1) + "/" + d.getFullYear();
 
-  // 5º dia útil (sábado conta; domingo e feriado não)
+  // 5º dia útil (sábado conta; domingo e feriado não). Se o 5º dia cair no sábado, o salário cai no dia útil anterior (sexta).
   function quintoDiaUtil(y, m0, fer) {
     let n = 0; const d = new Date(y, m0, 1, 12);
-    while (true) { if (d.getDay() !== 0 && !fer.has(ymd(d))) { n++; if (n === 5) return new Date(d); } d.setDate(d.getDate() + 1); }
+    while (true) { if (d.getDay() !== 0 && !fer.has(ymd(d))) { n++; if (n === 5) break; } d.setDate(d.getDate() + 1); }
+    if (d.getDay() === 6) { do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6 || fer.has(ymd(d))); }
+    return new Date(d);
   }
   function referencia(hoje, fer) {
     const y = hoje.getFullYear(), m = hoje.getMonth(); const q = quintoDiaUtil(y, m, fer);
@@ -68,6 +72,12 @@
     if (HS) { const cr = rows(wb, HS), ch = findRow(cr, (t) => t === "Mês da conta");
       if (ch >= 0) for (let i = ch + 1; i < cr.length; i++) { const r = cr[i]; if (!r) continue; const m = ym(r[0]); if (!m) continue;
         D.consumo.push({ mes: m, conta: txt(r[1]), ref: ym(r[2]), valor: num(r[3]), kwh: num(r[4]) }); } }
+    D.tarifas = { hist: {}, band: {} };
+    if (wb.Sheets["Tarifas Cemig"]) { const tr = rows(wb, "Tarifas Cemig"); let sec = 0;
+      tr.forEach((r) => { if (!r) return; const t0 = txt(r[0]);
+        if (/^Data da consulta/i.test(t0)) { sec = 1; return; } if (/^M[eê]s do consumo/i.test(t0)) { sec = 2; return; } if (/^BANDEIRA/i.test(t0)) { sec = 0; return; }
+        if (sec === 1) { const d = toDate(r[0]), b = txt(r[1]), v = num(r[2]); if (d && b && v) { const k = ymd(d); (D.tarifas.hist[k] = D.tarifas.hist[k] || {})[b] = v; } }
+        if (sec === 2) { const m = ym(r[0]), b = txt(r[1]); if (m && b) D.tarifas.band[m] = b; } }); }
     D.d13 = { "11": toDate(cell(wb, "13º e Férias", "C13")), "12": toDate(cell(wb, "13º e Férias", "C15")) };
     D.reservaInformada = num(cell(wb, C, "B5")); D.pct = num(cell(wb, C, "B6")); D.meta = D.pct > 1 ? D.pct : 0; D.planIni = ym(cell(wb, C, "B8")) || D.ini;
     D.cartoes = []; D.venc = {};
@@ -195,7 +205,8 @@
   let TAB = "geral";
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
     TAB = b.dataset.tab; document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-    ["geral", "dividas", "metas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
+    ["geral", "dividas", "rend", "metas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
+    try { localStorage.setItem("dash-aba", TAB); } catch (_) {} window.scrollTo({ top: 0 });
     $("filtros").style.display = TAB === "sim" ? "none" : ""; renderAll();
   }));
 
@@ -306,12 +317,12 @@
   const charts = {};
   const pal = () => [css("--s1"), css("--s2"), css("--s3"), css("--s4"), css("--s5"), css("--s6")];
   function baseOpts(stacked, fmtFn, extra = {}) {
-    const ink = css("--ink2"), line = css("--line");
+    const ink = css("--ink2"), line = css("--grid") || css("--line");
     const o = Object.assign({
       responsive: true, maintainAspectRatio: false, animation: { duration: 250 }, interaction: { mode: "index", intersect: false },
       plugins: {
-        legend: { position: "top", labels: { color: ink, boxWidth: 12, boxHeight: 12 } },
-        tooltip: { callbacks: { label: (c) => " " + c.dataset.label + ": " + fmtFn(c.raw) } },
+        legend: { position: "top", labels: { color: ink, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded", padding: 14 } },
+        tooltip: { backgroundColor: css("--tip") || "rgba(8,20,40,.92)", titleColor: "#fff", bodyColor: "#e6eefb", borderColor: css("--accent"), borderWidth: 1, padding: 10, cornerRadius: 10, boxPadding: 4, callbacks: { label: (c) => " " + c.dataset.label + ": " + fmtFn(c.raw) } },
         datalabels: { color: stacked ? "#fff" : ink, font: { size: 10, weight: "600" }, anchor: stacked ? "center" : "end", align: stacked ? "center" : "end", offset: 1, clamp: true,
           formatter: (v) => (v == null || Math.abs(v) < 0.005 ? "" : fmtFn(v)),
           display: (c) => { const v = c.dataset.data[c.dataIndex]; if (!v) return false; if (!stacked) return true;
@@ -336,24 +347,33 @@
   function abrirZoom(id) {
     const src = charts[id]; if (!src || !src._raw) return; fecharZoom(); const raw = src._raw;
     const card = $(id).closest(".card"); const titulo = card && card.querySelector("h2") ? card.querySelector("h2").textContent : "Gráfico";
+    const fonte = card && card.dataset.fonte ? card.dataset.fonte.split("|") : null;
     const ov = document.createElement("div"); ov.className = "zoomov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
-    ov.innerHTML = `<div class="zh"><h3>${esc(titulo)}</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div><div class="dica">Dica: gire o celular para ver o gráfico maior.</div><div class="zb"><div class="zc"><canvas id="zCanvas"></canvas></div></div>`;
+    ov.innerHTML = `<div class="zh"><h3>${esc(titulo)}</h3><div class="zh-a">${fonte ? `<button class="btn ghost" type="button" id="zFonte">Ver detalhes em ${esc(NOME_ABA[fonte[0]] || "outra aba")} ›</button>` : ""}<button class="btn" type="button" id="zClose">Fechar ✕</button></div></div><div class="dica">Dica: gire o celular para ver o gráfico maior.</div><div class="zb"><div class="zc"><canvas id="zCanvas"></canvas></div></div>`;
     document.body.appendChild(ov); document.body.style.overflow = "hidden";
     $("zClose").addEventListener("click", fecharZoom);
+    if (fonte) $("zFonte").addEventListener("click", () => { fecharZoom(); vaiPara(fonte[0], fonte[1]); });
     const horiz = raw.opts.indexAxis === "y", n = raw.labels.length, zc = ov.querySelector(".zc");
     if (horiz) zc.style.height = Math.max(ov.querySelector(".zb").clientHeight - 24, n * 30 + 80) + "px";
-    else { const minW = n * 64; if (minW > zc.clientWidth) zc.style.width = minW + "px"; }
+    else if (raw.type !== "doughnut") { const minW = n * 48; if (minW > zc.clientWidth) zc.style.width = minW + "px"; }
     const data = { labels: raw.labels.slice(), datasets: raw.datasets.map((d) => Object.assign({}, d, { data: d.data.slice() })) };
     const opts = Object.assign({}, raw.opts, { maintainAspectRatio: false, animation: false });
     opts.plugins = Object.assign({}, raw.opts.plugins, { legend: Object.assign({}, raw.opts.plugins.legend, { display: true }), datalabels: Object.assign({}, raw.opts.plugins.datalabels, { font: { size: 12, weight: "600" }, display: (c) => !!c.dataset.data[c.dataIndex] }) });
     zoomChart = new Chart($("zCanvas"), { type: raw.type, data, options: opts });
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharZoom(); });
-  const ds = (label, data, color, extra = {}) => Object.assign({ label, data, backgroundColor: color, borderColor: color, borderWidth: 0, borderRadius: 4, borderSkipped: "start", maxBarThickness: 46 }, extra);
+  // barras com degradê (cor cheia no topo, mais clara na base)
+  const grad = (color) => (ctx) => { const ch = ctx.chart, ar = ch.chartArea; if (!ar || typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) return color;
+    const h = ch.options.indexAxis === "y", g = h ? ch.ctx.createLinearGradient(ar.left, 0, ar.right, 0) : ch.ctx.createLinearGradient(0, ar.bottom, 0, ar.top);
+    g.addColorStop(0, color + "70"); g.addColorStop(1, color); return g; };
+  const ds = (label, data, color, extra = {}) => Object.assign({ label, data, backgroundColor: typeof color === "string" && !("fill" in extra) && extra.type !== "line" ? grad(color) : color, borderColor: color, borderWidth: 0, borderRadius: 7, borderSkipped: "start", maxBarThickness: 42,
+    pointBackgroundColor: color, pointBorderColor: css("--surface-solid") || "#fff", pointBorderWidth: 2, pointRadius: 3.5, pointHoverRadius: 6 }, extra);
 
   // ---------- render ----------
   function renderAll() { if (!DATA) return; resumoFiltros(); renderTopo(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
-    if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else if (TAB === "metas") renderMetas(); else renderSim(); setTimeout(exportaTudo, 0); }
+    if (!SIM) SIM = simLoad();
+    if (TAB === "sim") renderSim(); else if (TAB === "geral") renderResumo(F.mes); else { renderGeral(); renderDividas(); renderMetas(); }
+    renderSimBanner(); setTimeout(() => { exportaTudo(); rotulaTabelas(); }, 0); }
 
   function renderTopo() {
     const ms = DATA.meses.filter((k) => DATA.plano[k]); if (ms.length < 2) return;
@@ -390,8 +410,10 @@
   }
   function debitoMes(k) { // dinheiro para débito/Pix no mês k = salário de k (linha k-1) + 13º já caído
     const pk = addM(k, -1), pd = DATA.plano[pk] || {}, ex = extraMes(k), teto = (pd.teto || 0) + (ex.caiu ? ex.valor : 0), usado = gastoInter(pk).v;
-    return { teto, usado, livre: Math.max(0, teto - usado), ex, pd };
+    const salData = dataSalario(k), h = new Date(); h.setHours(12, 0, 0, 0);
+    return { teto, usado, livre: Math.max(0, teto - usado), ex, pd, salData, salCaiu: !salData || h >= salData };
   }
+  function dataSalario(k) { if (!k) return null; const [y, m] = k.split("-").map(Number); return quintoDiaUtil(y, m - 1, new Set(DATA.feriados || [])); }
   function debitoDisp(k, rest) {
     const p = DATA.plano[k] || {}, prev = DATA.plano[addM(k, -1)] || {};
     const sobraSal = (prev.espaco || 0) - (p.jaPix || 0) - (k > DATA.planIni ? prev.jaCartao || 0 : 0);
@@ -431,7 +453,6 @@
   function renderFormas() { const el = $("formas"); if (el) { el.innerHTML = ""; el.hidden = true; } }
 
   function renderGeral(onlyHero) {
-    renderHoje();
     const k = F.mes, i = idx(k), p = DATA.plano[k] || {}, pr = DATA.proj, pct = F.unid === "pct";
     const real = DATA.tipo[i] === "Realizado";
     $("hTag").innerHTML = real ? '<span class="tag">realizado</span>' : '<span class="tag prev">previsto</span>';
@@ -444,6 +465,8 @@
     const credAinda = (p.teto || 0) - gastoInter(k).v;
     const antes = mesAtual() === k && fch && hj.getDate() <= fch;
     $("hRestante").textContent = R(deb); $("hRestante").classList.toggle("neg", deb <= 0);
+    if (!dm.salCaiu && dm.salData) $("hTag").innerHTML += ` <span class="tag warn">entra em ${fmtD(dm.salData)}</span>`;
+    { const sd = simDelta(pk); if (sd && Math.abs(sd.d) > 0.005) $("hTag").innerHTML += ` <span class="tag sim">🧪 com simulação: ${R(Math.max(0, deb + sd.d))}</span>`; }
     const uso = teto ? gi.v / teto : 1; $("hBar").style.width = Math.min(100, uso * 100) + "%"; $("hBar").classList.toggle("over", uso > 1);
     $("hBar").parentElement.hidden = false;
     $("hResumo").innerHTML = (teto
@@ -471,7 +494,7 @@
     let man = null; try { man = localStorage.getItem("gasto-" + addM(k, -1)); } catch (_) {}
     if (!onlyHero) $("gastoManual").value = man ?? "";
     const ent = pr.entradas[i] || 0;
-    renderCabe(k); renderContas(k, "g"); renderCompras(k, "gLanc", "gLResumo"); renderFormas(k); renderRend(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
+    renderCabe(k); renderFormas(k); renderRend(k); renderSaude(k); renderRitmo(k); renderLimites(k); renderVR();
     const kp = [
       ["13º/férias livres", R(p.fora), "extra do mês, além do teto"],
       ["VR / Flash do mês", R(p.vr || pr.vr[i]), "usado nas compras do supermercado"],
@@ -677,7 +700,7 @@
       kpis.push(["Consumo (último)", ue ? ue.kwh + " kWh" : "—", ue ? "variação " + fP(ue.dk) : "mande o kWh das contas"], ["Preço por kWh", ue ? "R$ " + ue.rk.toFixed(3).replace(".", ",") : "—", ue ? "variação " + fP(ue.drk) : ""]); }
     ov.innerHTML = `<div class="zh"><h3>${esc(baseConta(nome))} — evolução mês a mês</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div>
       <div class="zb"><h2 class="exp-tit">${esc(baseConta(nome))} — evolução mês a mês</h2><div class="kpis">${kpis.map(([l, v, sb]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${/^[+-]/.test(v) ? cl(parseFloat(v.replace(",", ".").replace("%", ""))) : ""}">${v}</div><div class="s">${sb}</div></div>`).join("")}</div>
-      ${energia ? `<h3 class="h3">Valor da conta (R$) x consumo (kWh)</h3>` : ""}<div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<div id="ctaExp" class="cta-exp"></div>` : ""}
+      ${energia ? `<h3 class="h3">Valor da conta (R$) x consumo (kWh)</h3>` : ""}<div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<div id="ctaExp" class="cta-exp"></div><div id="ctaCemig" class="cemig"></div>` : ""}
       <div class="tblwrap"><table class="tbl"><tr><th>Mês</th><th>Valor</th><th>Variação</th><th>Tipo</th>${energia ? "<th>Referente a</th><th>kWh</th><th>Variação kWh</th><th>R$/kWh</th><th>Variação R$/kWh</th>" : ""}</tr>` +
       ate.map((x) => `<tr class="${x.m === k ? "sel" : ""}${energia && x.kwh ? " clic" : ""}" data-m="${x.m}"><td>${lab(x.m)}</td><td>${R(x.v)}${x.est ? "*" : ""}</td><td class="${cl(x.dv)}">${fP(x.dv)}</td><td>${x.real ? "real" : "previsto"}</td>${energia ? `<td>${x.ref ? lab(x.ref) : "—"}</td><td>${x.kwh || "—"}</td><td class="${cl(x.dk)}">${fP(x.dk)}</td><td>${x.rk ? "R$ " + x.rk.toFixed(3).replace(".", ",") : "—"}</td><td class="${cl(x.drk)}">${fP(x.drk)}</td>` : ""}</tr>`).join("") +
       `</table></div><p class="muted small">Variação = comparação com o mês anterior (vermelho = subiu, verde = caiu). * = valor previsto/estimado.${energia ? " Consumo e contas antigas ficam na aba Histórico de contas da planilha." : ""}</p></div>`;
@@ -728,11 +751,260 @@
           <div class="cta-exp-s">${motivo}${motivo ? ". " : ""}Se o kWh tivesse ficado no preço de ${lab(p.m)}, essa conta seria ${R(x.kwh * pk)}.</div>
           <div class="muted small">Clique em outra coluna do gráfico ou linha da tabela para ver outro mês.</div>`;
       };
+      const mostra = (m) => { explica(m); const cb = $("ctaCemig"); if (cb) cb.innerHTML = htmlCemig(m); setTimeout(rotulaTabelas, 0); };
       const ligaClique = (id, lista) => { const ch = charts[id]; if (!ch) return; $(id).onclick = null; $(id).style.cursor = "pointer";
-        ch.options.onClick = (e, els) => { const el = els && els[0]; if (el) explica(lista[el.index].m); }; ch.update("none"); };
+        ch.options.onClick = (e, els) => { const el = els && els[0]; if (el) mostra(lista[el.index].m); }; ch.update("none"); };
       ligaClique("ctaC1", ate);
-      ov.querySelectorAll("tr.clic[data-m]").forEach((tr) => tr.addEventListener("click", () => explica(tr.dataset.m)));
-      const ini = ek.find((x) => x.m === k) || ek[ek.length - 1]; if (ini) explica(ini.m); }
+      ov.querySelectorAll("tr.clic[data-m]").forEach((tr) => tr.addEventListener("click", () => mostra(tr.dataset.m)));
+      const ini = ek.find((x) => x.m === k) || ek[ek.length - 1]; if (ini) mostra(ini.m); }
+  }
+
+  // ================= VISÃO GERAL (consolidado) =================
+  const NOME_ABA = { geral: "Visão geral", dividas: "Contas e dívidas", rend: "Rendimentos", metas: "Metas e cortes", sim: "Simulação" };
+  const fPct = (v) => (v == null || !isFinite(v) ? "—" : (v > 0 ? "+" : "") + (v * 100).toFixed(1).replace(".", ",") + "%");
+  const DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const hoje12 = () => { const h = new Date(); h.setHours(12, 0, 0, 0); return h; };
+  const diasAte = (d) => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12) - hoje12()) / 864e5);
+  const quando = (d) => { const n = diasAte(d); return n === 0 ? "hoje" : n === 1 ? "amanhã" : n > 0 ? "em " + n + " dias" : "há " + -n + " dia" + (n < -1 ? "s" : ""); };
+  function vaiPara(tab, id) {
+    const b = document.querySelector(`.tabs button[data-tab="${tab}"]`); if (b) b.click();
+    setTimeout(() => { const el = $(id); if (!el) return; el.scrollIntoView({ behavior: "smooth", block: "start" }); el.classList.remove("piscar"); void el.offsetWidth; el.classList.add("piscar"); }, 120);
+  }
+  function donutOpts(fmtFn) {
+    const ink = css("--ink2");
+    return { responsive: true, maintainAspectRatio: false, cutout: "68%", animation: { duration: 300 },
+      plugins: { legend: { position: "right", labels: { color: ink, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: "rectRounded", padding: 10, font: { size: 12 } } },
+        tooltip: { backgroundColor: css("--tip") || "rgba(8,20,40,.92)", padding: 10, cornerRadius: 10, callbacks: { label: (c) => " " + c.label + ": " + fmtFn(c.raw) } },
+        datalabels: { color: "#fff", font: { size: 11, weight: "700" }, formatter: (v, c) => { const t = c.dataset.data.reduce((s, x) => s + (x || 0), 0); return t && v / t > 0.08 ? Math.round((v / t) * 100) + "%" : ""; } } } };
+  }
+  // dinheiro para débito/Pix considerando a data de hoje (salário, 13º e extras só depois que caem)
+  function dinheiroAgora() {
+    const cal = mesAtual(), dm = debitoMes(cal), prev = debitoMes(addM(cal, -1));
+    if (dm.salCaiu) return { agora: dm.livre, dm, futuro: null, cal };
+    return { agora: prev.livre, dm, futuro: { valor: dm.livre, data: dm.salData, mes: cal }, cal };
+  }
+  function catsMes(k) {
+    const ci = DATA.cat.meses.indexOf(k);
+    const realCats = ci >= 0 ? Object.entries(DATA.cat.itens).map(([n, o]) => [n, num(o.vals[ci])]).filter(([, v]) => v > 0.005) : [];
+    if (realCats.length) return { cats: realCats.sort((a, b) => b[1] - a[1]), real: true };
+    const m = {}; DATA.fixos.filter((f) => ativo(f, k)).forEach((f) => (m[f.cat] = (m[f.cat] || 0) + f.custo)); DATA.dividas.filter((d) => ativo(d, k)).forEach((d) => (m[d.cat] = (m[d.cat] || 0) + d.custo));
+    DATA.lanc.filter((l) => l.ini && l.ini <= k && l.fim >= k).forEach((l) => (m[l.cat || "Outros"] = (m[l.cat || "Outros"] || 0) + l.custo));
+    return { cats: Object.entries(m).filter(([, v]) => v > 0.005).sort((a, b) => b[1] - a[1]), real: false };
+  }
+  function eventosMes(k) { // o que entra no mês k e quando
+    const ev = [], r = rendimentos(k), sd = dataSalario(k), h = hoje12();
+    if (r.sal) ev.push({ n: "Salário", v: r.sal, d: sd });
+    r.itens.filter((i) => i.c !== "vr").forEach((i) => ev.push({ n: i.desc, v: i.valor, d: sd }));
+    const d13 = (DATA.d13 || {})[k.slice(5)]; if (r.d13) ev.push({ n: "13º salário", v: r.d13, d: d13 || sd });
+    if (r.fer) ev.push({ n: "Férias", v: r.fer, d: sd });
+    const [y, m] = k.split("-").map(Number), vrd = ultimoDiaUtil(y, m - 1), vrv = vrMes(addM(k, 1)); if (vrv) ev.push({ n: "VR / Flash de " + lab(addM(k, 1)), v: vrv, d: vrd, vr: true });
+    ev.forEach((e) => (e.caiu = e.d ? h >= new Date(e.d.getFullYear(), e.d.getMonth(), e.d.getDate(), 12) : false));
+    return ev.sort((a, b) => (a.d || 0) - (b.d || 0));
+  }
+  function renderResumo(k) {
+    const cor = pal(), h = hoje12(), r = rendimentos(k), da = dinheiroAgora(), cs = contasMes(k);
+    const pagas = cs.filter((c) => c.pago), pend = cs.filter((c) => !c.pago);
+    const tPago = pagas.reduce((s, c) => s + (c.pago.valor || c.valor), 0), tPend = pend.reduce((s, c) => s + c.valor, 0);
+    const rc = receber(k); statusReceber(k, rc);
+    const recTot = rc.reduce((s, x) => s + x.valor, 0), recPago = rc.reduce((s, x) => s + Math.min(x.valor, x.pago || 0), 0), recPend = Math.max(0, recTot - recPago);
+    const outros = r.dinheiro - r.sal, entradas = r.dinheiro + recTot, saidas = tPago + tPend, sobra = entradas - saidas;
+    const ev = eventosMes(k), vencidas = pend.filter((c) => { const d = diaVenc(k, c.dia); return d && d < h; });
+    const ok = sobra >= -0.005, pc = DATA.plano[k] || {}, cartao = Math.max(0, (pc.teto || 0) - gastoInter(k).v);
+    const sdl = simDelta(addM(da.futuro ? da.futuro.mes : da.cal, -1));
+    const barra = (itens, tot) => `<div class="sbar">${itens.filter(([, v]) => v > 0.005).map(([n, v, c]) => `<span style="flex:${v};background:${c}" title="${esc(n)}: ${R(v)}"></span>`).join("")}</div>`;
+    const maxT = Math.max(entradas, saidas, 1);
+    $("sit").innerHTML = `
+      <div class="sit-h"><div><p class="eyebrow">Minha situação financeira · ${labL(k)}</p><h2 class="sit-tit">${ok ? "✅ Dá para pagar todas as contas" : "⚠️ As contas passam das entradas"}</h2>
+        <p class="muted small">Hoje ${fmtD(h)} (${DIAS[h.getDay()]}) · salário de ${MESESL[+k.slice(5) - 1]} ${dataSalario(k) ? (h >= dataSalario(k) ? "caiu em " : "cai em ") + fmtD(dataSalario(k)) + " (" + DIAS[dataSalario(k).getDay()] + ")" : ""}</p></div>
+        <div class="sit-res ${ok ? "pos" : "neg"}"><div class="l">${ok ? "Sobra no mês" : "Falta no mês"}</div><div class="v">${R(Math.abs(sobra))}</div><div class="s">entradas − contas do mês</div></div></div>
+      <div class="sit-g">
+        <div class="blk blk-in"><div class="blk-t">💰 Entradas do mês</div><div class="blk-v">${R(entradas)}</div>
+          <ul class="blk-l"><li><span>Salário líquido</span><b>${R(r.sal)}</b></li><li><span>Outros rendimentos</span><b>${R(outros)}</b></li><li><span>A receber de terceiros</span><b>${R(recTot)}</b></li></ul>
+          ${barra([["Salário", r.sal, cor[0]], ["Outros", outros, cor[2]], ["Terceiros", recTot, cor[4]]])}
+          <div class="blk-n">${r.vr ? "+ " + R(r.vr) + " no Flash (só alimentação)" : ""}</div></div>
+        <div class="blk blk-out"><div class="blk-t">🧾 Contas do mês</div><div class="blk-v">${R(saidas)}</div>
+          <ul class="blk-l"><li><span>Já pago</span><b class="pos">${R(tPago)}</b></li><li><span>Falta pagar</span><b class="${tPend > 0.005 ? "neg" : ""}">${R(tPend)}</b></li><li><span>Contas</span><b>${pagas.length} de ${cs.length} pagas</b></li></ul>
+          <div class="pbar"><span style="width:${saidas ? (tPago / saidas) * 100 : 0}%"></span></div>
+          <div class="blk-n ${vencidas.length ? "neg" : ""}">${vencidas.length ? "⚠️ " + vencidas.length + " vencida(s): " + vencidas.map((c) => esc(c.nome)).join(", ") : "nenhuma conta vencida"}</div></div>
+        <div class="blk blk-rec"><div class="blk-t">🤝 Terceiros</div><div class="blk-v">${R(recPend)}</div>
+          <ul class="blk-l"><li><span>Devem no mês</span><b>${R(recTot)}</b></li><li><span>Já recebi</span><b class="pos">${R(recPago)}</b></li><li><span>Falta receber</span><b class="${recPend > 0.005 ? "neg" : ""}">${R(recPend)}</b></li></ul>
+          <div class="pbar alt"><span style="width:${recTot ? (recPago / recTot) * 100 : 0}%"></span></div><div class="blk-n">${Object.entries(devidoPessoa(k)).map(([p, v]) => esc(p) + " " + R0(v)).join(" · ") || "ninguém deve neste mês"}</div></div>
+        <div class="blk blk-gasto"><div class="blk-t">💵 Posso gastar agora</div><div class="blk-v ${da.agora <= 0.005 ? "neg" : ""}">${R(da.agora)}</div>
+          <ul class="blk-l">${da.futuro ? `<li><span>⏳ ${fmtD(da.futuro.data)} (${DIAS[da.futuro.data.getDay()]})</span><b>+ ${R(da.futuro.valor)}</b></li>` : ""}
+            ${da.dm.ex.valor && !da.dm.ex.caiu ? `<li><span>⏳ 13º livre em ${da.dm.ex.data ? fmtD(da.dm.ex.data) : "breve"}</span><b>+ ${R(da.dm.ex.valor)}</b></li>` : ""}
+            <li><span>💳 Cartão (só parcelado)</span><b>${R(cartao)}</b></li></ul>
+          <div class="blk-n">no débito/Pix · conta só o que já caiu na conta${sdl && Math.abs(sdl.d) > 0.005 ? ` · <span class="sim-t">🧪 com simulação: ${R(Math.max(0, (da.futuro ? da.futuro.valor : da.agora) + sdl.d))}</span>` : ""}</div></div>
+      </div>
+      <div class="sit-cmp"><div class="cmp-r"><span>Entradas</span><div class="cmp-b"><span style="width:${(entradas / maxT) * 100}%"></span></div><b>${R0(entradas)}</b></div>
+        <div class="cmp-r out"><span>Contas</span><div class="cmp-b"><span style="width:${(saidas / maxT) * 100}%"></span></div><b>${R0(saidas)}</b></div></div>
+      <div class="tl">${ev.map((e) => `<div class="tl-i ${e.caiu ? "ok" : ""}"><i></i><div><b>${e.d ? pad(e.d.getDate()) + "/" + pad(e.d.getMonth() + 1) : "—"}</b> ${esc(e.n)}</div><span>${e.caiu ? "✓ caiu" : quando(e.d)} · ${R0(e.v)}</span></div>`).join("")}</div>`;
+
+    // ---- blocos de números (clicáveis: levam para a aba com os detalhes)
+    const vr = (() => { const cal = mesAtual(); const m = DATA.meses.includes(cal) ? cal : k; return vrSaldoIni(m) + vrMes(m) - vrGasto(m); })();
+    const Fm = addM(k, 1), j = idx(Fm), sal = j >= 0 ? DATA.proj.renda[j] : 0, parc = parcelasMeu(Fm), pp = sal ? parc / sal : 0;
+    const as = DATA.mc.ass, assTot = as.filter((a) => !assOff(a.nome)).reduce((s, a) => s + a.valor, 0);
+    const cem = checaCemig(), alE = cem ? cem.al.filter((x) => x.nv !== "info") : [];
+    const tiles = [
+      ["💵", "Posso gastar agora", R(da.agora), da.futuro ? "+ " + R0(da.futuro.valor) + " em " + fmtD(da.futuro.data) : "débito/Pix", "metas|heroCard", da.agora <= 0.005 ? "neg" : "pos"],
+      ["🧾", "Falta pagar em " + lab(k), R(tPend), pend.length + " conta(s) pendente(s)", "dividas|cardContas", tPend > 0.005 ? "neg" : "pos"],
+      ["💰", "Rendimentos de " + lab(k), R(r.dinheiro), "salário + extras (líquido)", "rend|rendCard", ""],
+      ["🤝", "Falta receber", R(recPend), "de " + R0(recTot) + " devidos no mês", "rend|cardReceber", recPend > 0.005 ? "warn" : "pos"],
+      ["🍽️", "Flash (VR)", R(vr), "saldo para alimentação", "rend|vrCard", vr < 0 ? "neg" : ""],
+      ["🛡️", "Reserva no fim de " + lab(k), R0(pc.reservaAc), "aporte do mês " + R0(pc.reserva), "metas|cardReserva", ""],
+      ["📉", "Parcelas ÷ salário", P(pp), "ideal até 30%", "metas|saude", pp > 0.45 ? "neg" : pp > 0.3 ? "warn" : "pos"],
+      ["🔁", "Assinaturas", R(assTot) + "/mês", as.length + " ativas" + (ASS_OFF.size ? " · " + ASS_OFF.size + " na prévia de corte" : ""), "metas|cardAss", ""],
+    ];
+    $("ovKpis").innerHTML = tiles.map(([ic, l, v, s, go, c]) => `<button type="button" class="tile ${c}" data-go="${go}"><span class="ic">${ic}</span><span class="l">${l}</span><span class="v">${v}</span><span class="s">${s}</span><span class="go">ver ›</span></button>`).join("");
+    $("ovKpis").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => { const [t, id] = b.dataset.go.split("|"); vaiPara(t, id); }));
+
+    // ---- gráficos (clique = tela cheia com link para a fonte)
+    const rg = range(), L = rg.map(lab), ix = rg.map(idx), pr = DATA.proj;
+    const sai = ix.map((q) => Math.abs(pr.fixos[q] || 0) + Math.abs(pr.parcelas[q] || 0) + Math.abs(pr.variaveis[q] || 0));
+    draw("ovFluxo", "bar", L, [ds("Entradas", ix.map((q) => pr.entradas[q] || 0), cor[0]), ds("Saídas", sai, cor[5]),
+      ds("Sobra", ix.map((q) => pr.sobra[q] || 0), cor[1], { type: "line", fill: false, borderWidth: 2.5, tension: 0.35, datalabels: { display: false } })], baseOpts(false, (v) => R0(v)));
+    charts.ovFluxo.options.plugins.datalabels.display = false; charts.ovFluxo.update("none");
+    $("ovContasT").textContent = `${pagas.length} de ${cs.length} pagas`;
+    draw("ovContas", "doughnut", ["Pago", "Falta pagar"], [{ data: [Math.round(tPago * 100) / 100, Math.round(tPend * 100) / 100], backgroundColor: [cor[1], cor[5]], borderWidth: 0, hoverOffset: 6 }], donutOpts(R));
+    const rs = rg.map(rendimentos), cats = CAT_REND.filter(([c]) => c !== "vr" && rs.some((x) => x[c])), cc = [cor[0], cor[2], cor[3], cor[1], cor[4], css("--muted")];
+    const or = draw("ovRend", "bar", L, cats.map(([c, n], z) => ds(n, rs.map((x) => Math.round(x[c] * 100) / 100), cc[z % cc.length])), baseOpts(true, (v) => R0(v)));
+    or.options.plugins.datalabels.display = false; or.update("none");
+    const ct = catsMes(k), top = ct.cats.slice(0, 6), resto = ct.cats.slice(6).reduce((s, c) => s + c[1], 0); if (resto > 0.005) top.push(["Outros", resto]);
+    $("ovCatT").textContent = (ct.real ? "realizado" : "previsto") + " em " + lab(k);
+    draw("ovCat", "doughnut", top.map((c) => c[0]), [{ data: top.map((c) => Math.round(c[1] * 100) / 100), backgroundColor: top.map((_, z) => [cor[0], cor[1], cor[2], cor[3], cor[4], cor[5], css("--muted")][z % 7]), borderWidth: 0, hoverOffset: 6 }], donutOpts(R));
+    const ms = DATA.meses.filter((m) => DATA.plano[m] && m >= DATA.planIni).slice(0, 18);
+    const orr = draw("ovRes", "line", ms.map(lab), [ds("Reserva acumulada", ms.map((m) => (DATA.plano[m] || {}).reservaAc || 0), cor[1], { fill: true, backgroundColor: (ctx) => { const ar = ctx.chart.chartArea; if (!ar) return cor[1] + "33"; const g = ctx.chart.ctx.createLinearGradient(0, ar.top, 0, ar.bottom); g.addColorStop(0, cor[1] + "66"); g.addColorStop(1, cor[1] + "00"); return g; }, borderWidth: 3, tension: 0.35, pointRadius: 0, datalabels: { display: (c) => c.dataIndex === ms.length - 1, align: "top" } })], baseOpts(false, (v) => R0(v)));
+    orr.options.plugins.legend.display = false; orr.update("none");
+    const pend2 = pendencias(k).mes, pes = Object.keys(pend2).filter((p) => pend2[p].d > 0.005);
+    $("ovRecT").textContent = lab(k);
+    const orc = draw("ovRec", "bar", pes, [ds("Recebido", pes.map((p) => Math.round(pend2[p].r * 100) / 100), cor[1]), ds("Falta", pes.map((p) => Math.round(pend2[p].pend * 100) / 100), cor[5])], baseOpts(true, (v) => R0(v), { indexAxis: "y" }));
+    orc.update("none");
+    const ml = DATA.meses.filter((m) => m >= addM(k, 1)).slice(0, 18), vl = ml.map((m) => Math.round(parcelasMeu(m) * 100) / 100);
+    const ol = draw("ovLibera", "line", ml.map(lab), [ds("Minhas parcelas", vl, cor[3], { fill: true, backgroundColor: cor[3] + "26", stepped: true, borderWidth: 2.5, pointRadius: 0, datalabels: { display: (c) => c.dataIndex === 0 || vl[c.dataIndex - 1] - vl[c.dataIndex] > 150, align: "top" } })], baseOpts(false, (v) => R0(v)));
+    ol.options.plugins.legend.display = false; ol.update("none");
+    document.querySelectorAll("#tab-geral .ov-c").forEach((c) => { const cv = c.querySelector("canvas"); if (!cv) return; cv.onclick = () => abrirZoom(cv.id); });
+
+    // ---- alertas
+    const al = [];
+    vencidas.forEach((c) => al.push(["bad", `Conta vencida: ${esc(c.nome)} (${R(c.valor)})`, "dividas|cardContas"]));
+    alE.forEach((x) => al.push([x.nv, "⚡ " + x.t, "dividas|cardContas"]));
+    const lim = DATA.mc.limites.filter((x) => x.lim > 0), gc = {}; lancMes(k).forEach((l) => (gc[l.cat || "Outros"] = (gc[l.cat || "Outros"] || 0) + l.meuTotal));
+    const est = lim.filter((x) => (gc[x.cat] || 0) > x.lim + 0.005); if (est.length) al.push(["warn", `Limites estourados em ${lab(k)}: ${est.map((x) => esc(x.cat) + " (" + R0(gc[x.cat]) + " de " + R0(x.lim) + ")").join(", ")}`, "metas|cardLim"]);
+    const aval = as.filter((a) => a.manter === "Avaliar"); if (aval.length) al.push(["info", `${aval.length} assinatura(s) marcadas "Avaliar" somam ${R(aval.reduce((s, a) => s + a.valor, 0))}/mês. Teste o corte na aba Metas e cortes.`, "metas|cardAss"]);
+    if (recPend > 0.005) al.push(["info", `Falta receber ${R(recPend)} de terceiros em ${lab(k)}.`, "rend|cardReceber"]);
+    $("ovAlertas").innerHTML = `<div class="row-between"><h2>Atenção</h2><span class="muted small">${al.length ? al.length + " ponto(s)" : "tudo em ordem"}</span></div>` +
+      (al.length ? `<div class="alertas">${al.map(([nv, t, go]) => `<button type="button" class="al ${nv}" data-go="${go}">${t}<span>›</span></button>`).join("")}</div>` : `<p class="icon-ok">Nenhum alerta para ${lab(k)}.</p>`);
+    $("ovAlertas").querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => { const [t, id] = b.dataset.go.split("|"); if (/⚡/.test(b.textContent)) { vaiPara(t, id); setTimeout(() => abrirConta("Luz / Energia", "Conta", k), 450); } else vaiPara(t, id); }));
+  }
+
+  // ================= TARIFAS DA CEMIG =================
+  const ORD_B = ["verde", "amarela", "vermelha 1", "vermelha 2"];
+  const bandK = (b) => { const t = txt(b).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); return /verm.*(2|ii)/.test(t) ? "vermelha 2" : /verm/.test(t) ? "vermelha 1" : /amarel/.test(t) ? "amarela" : /verde/.test(t) ? "verde" : null; };
+  const f5 = (v) => (v == null ? "—" : "R$ " + v.toFixed(5).replace(".", ","));
+  const f3 = (v) => (v == null ? "—" : "R$ " + v.toFixed(3).replace(".", ","));
+  function tarifaCemig() {
+    const T = DATA.tarifas; if (!T || !T.hist) return null; const ds_ = Object.keys(T.hist).sort(); if (!ds_.length) return null;
+    const pega = (d) => { const o = {}; Object.entries(T.hist[d]).forEach(([b, v]) => { const k = bandK(b); if (k) o[k] = v; }); return o; };
+    return { data: ds_[ds_.length - 1], t: pega(ds_[ds_.length - 1]), ant: ds_.length > 1 ? { data: ds_[ds_.length - 2], t: pega(ds_[ds_.length - 2]) } : null, band: T.band || {} };
+  }
+  function checaCemig() {
+    const tc = tarifaCemig(); if (!tc) return null;
+    const al = [], dt = (s) => s.split("-").reverse().join("/");
+    for (let i = 1; i < ORD_B.length; i++) { const x = tc.t[ORD_B[i - 1]], y = tc.t[ORD_B[i]]; if (x && y && y <= x) al.push({ nv: "bad", t: `A tabela da Cemig não faz sentido: ${ORD_B[i]} (${f5(y)}) deveria ser mais cara que ${ORD_B[i - 1]} (${f5(x)}). Confira a aba Tarifas Cemig.` }); }
+    if (!tc.t.verde) al.push({ nv: "bad", t: "Falta a tarifa da bandeira verde na aba Tarifas Cemig." });
+    if (tc.t.verde && (tc.t.verde < 0.4 || tc.t.verde > 2)) al.push({ nv: "bad", t: `Tarifa verde de ${f5(tc.t.verde)} por kWh parece errada (esperado entre R$ 0,40 e R$ 2,00). Confira se não foi copiada por 1.000 kWh.` });
+    if (tc.ant && tc.ant.t.verde && tc.t.verde) { const v = tc.t.verde / tc.ant.t.verde - 1;
+      if (Math.abs(v) > 0.15) al.push({ nv: "bad", t: `A tarifa verde mudou ${fPct(v)} entre ${dt(tc.ant.data)} e ${dt(tc.data)}. Reajuste da Cemig costuma ser bem menor: confira se o valor está certo.` });
+      else if (Math.abs(v) > 0.00001) al.push({ nv: "info", t: `Tarifa nova desde ${dt(tc.data)}: verde ${fPct(v)} em relação à tabela de ${dt(tc.ant.data)}.` }); }
+    const serie = serieConta("Luz / Energia", "Conta").filter((x) => x.kwh && x.real);
+    const L = serie.map((x) => { const ref = x.ref || addM(x.m, -1), bd = tc.band[ref] ? bandK(tc.band[ref]) : null, base = bd ? tc.t[bd] || null : null, rk = x.v / x.kwh;
+      return { m: x.m, ref, bd, base, rk, v: x.v, kwh: x.kwh, fator: base ? rk / base : null }; });
+    const med = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a, b) => a - b), n = s.length; return n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2; };
+    L.forEach((l, i) => { l.fatorRef = med(L.filter((o, j) => j !== i && o.fator).map((o) => o.fator));
+      if (!l.bd) l.st = "semband"; else if (l.base && l.fatorRef) { l.esp = l.base * l.fatorRef * l.kwh; l.dif = l.v - l.esp; l.difP = l.dif / l.esp; l.st = l.difP > 0.04 ? "acima" : l.difP < -0.04 ? "abaixo" : "ok"; } else l.st = "ok"; });
+    L.forEach((l, i) => { const p = L[i - 1], msgs = [];
+      if (l.st === "semband") al.push({ nv: "warn", m: l.m, t: `Conta de ${lab(l.m)}: falta a bandeira de ${lab(l.ref)} na aba Tarifas Cemig, então não dá para conferir.` });
+      if (l.st === "acima") msgs.push(`veio ${R(l.dif)} (${fPct(l.difP)}) acima do esperado pela tarifa com bandeira ${l.bd} em ${lab(l.ref)} (esperado ≈ ${R(l.esp)})`);
+      if (p && p.bd && l.bd && ORD_B.indexOf(l.bd) < ORD_B.indexOf(p.bd) && l.rk > p.rk * 1.01) msgs.push(`a bandeira ficou mais barata (${p.bd} → ${l.bd}), mas o kWh pago subiu ${fPct(l.rk / p.rk - 1)}; pela tabela deveria ter caído ${fPct(l.base / p.base - 1)}`);
+      if (p && p.bd && l.bd && ORD_B.indexOf(l.bd) > ORD_B.indexOf(p.bd) && l.rk < p.rk * 0.99) msgs.push(`a bandeira ficou mais cara (${p.bd} → ${l.bd}), mas o kWh pago caiu: confira se a bandeira do mês está certa`);
+      if (l.fator && (l.fator < 1.15 || l.fator > 1.5)) msgs.push(`impostos e encargos equivalem a ${fPct(l.fator - 1)} sobre a tarifa (o normal fica perto de 25% a 35%)`);
+      if (msgs.length) { l.alerta = msgs; al.push({ nv: "bad", m: l.m, t: `Conta de energia de ${lab(l.m)}: ${msgs.join("; ")}. Confira na fatura ICMS, PIS/COFINS, iluminação pública, multa/juros ou outros itens.` }); }
+      else if (l.st === "abaixo") al.push({ nv: "info", m: l.m, t: `Conta de energia de ${lab(l.m)} veio ${R(-l.dif)} abaixo do esperado pela tarifa.` });
+    });
+    return { tc, L, al };
+  }
+  function htmlCemig(sel) {
+    const c = checaCemig(); if (!c) return `<p class="muted small">Cadastre a aba Tarifas Cemig na planilha para conferir as contas com a tarifa.</p>`;
+    const dt = c.tc.data.split("-").reverse().join("/"), cl = (l) => (l.alerta ? "neg" : l.st === "abaixo" ? "pos" : "");
+    const tag = (l) => l.alerta ? `<span class="tag bad">Conferir</span>` : l.st === "semband" ? `<span class="tag">Sem bandeira</span>` : l.st === "abaixo" ? `<span class="tag good">Abaixo</span>` : `<span class="tag good">Dentro</span>`;
+    return `<h3 class="h3">⚡ Conferência com a tarifa da Cemig</h3>
+      <div class="tarifas">${ORD_B.filter((b) => c.tc.t[b]).map((b) => `<span class="tf tf-${b.replace(" ", "")}"><i></i>${b[0].toUpperCase() + b.slice(1)} <b>${f5(c.tc.t[b])}</b></span>`).join("")}<span class="muted small">por kWh, sem impostos · tabela de ${dt}</span></div>
+      ${c.al.length ? `<div class="alertas">${c.al.map((x) => `<div class="al ${x.nv}">${x.nv === "bad" ? "⚠️ " : x.nv === "warn" ? "❕ " : "ℹ️ "}${x.t}</div>`).join("")}</div>` : `<p class="icon-ok">Todas as contas batem com a tarifa da Cemig.</p>`}
+      <div class="tblwrap"><table class="tbl"><tr><th>Conta</th><th>Consumo de</th><th>Bandeira</th><th>Tarifa (sem impostos)</th><th>R$/kWh pago</th><th>Impostos e encargos</th><th>Esperado</th><th>Pago</th><th>Diferença</th><th>Situação</th></tr>` +
+      c.L.map((l) => `<tr class="${l.m === sel ? "sel" : ""}"><td>${lab(l.m)}</td><td>${lab(l.ref)}</td><td>${l.bd ? `<span class="tf tf-${l.bd.replace(" ", "")}"><i></i>${l.bd}</span>` : "—"}</td><td>${f5(l.base)}</td><td>${f3(l.rk)}</td><td>${l.fator ? fPct(l.fator - 1) : "—"}</td><td>${l.esp ? R(l.esp) : "—"}</td><td>${R(l.v)}</td><td class="${cl(l)}">${l.dif != null ? (l.dif > 0 ? "+" : "") + R(l.dif) : "—"}</td><td>${tag(l)}</td></tr>`).join("") + `</table></div>
+      <p class="muted small">Esperado = kWh × tarifa da bandeira do mês do consumo × impostos e encargos típicos (mediana das outras contas). Contas de consumo antes de jun/26 podem ter outra tarifa (a Cemig reajusta todo ano no fim de maio). Quando a Cemig mudar a tarifa, mande o PDF que eu atualizo a aba Tarifas Cemig.</p>`;
+  }
+
+  // ================= SIMULAÇÃO EM QUALQUER QUADRO =================
+  function simDelta(row) { // diferença no dinheiro livre da linha do plano com a simulação ativa
+    if (!SIM || !SIM.itens.length || !DATA.plano[row]) return null;
+    const ln = simCalc().linhas, l = ln.find((x) => x.k === row), u = ln[ln.length - 1];
+    return l ? { d: l.tetoD - l.tetoA, accA: u.accA, accD: u.accD, u } : null;
+  }
+  function renderSimBanner() {
+    const el = $("simBanner"); if (!el) return; const n = SIM && SIM.itens.length;
+    if (!n || TAB === "sim") { el.hidden = true; return; }
+    const tot = SIM.itens.reduce((s, it) => s + (it.t === "div" ? (+it.valor || 0) * (+it.n || 1) : +it.valor || 0), 0), ln = simCalc().linhas, u = ln[ln.length - 1];
+    el.hidden = false;
+    el.innerHTML = `<span>🧪 <b>Prévia de simulação ativa</b>: ${n} item(ns), ${R(tot)} no total · reserva em ${lab(u.k)}: ${R0(u.accA)} → <b>${R0(u.accD)}</b>. Nada mudou na planilha.</span><span class="sb-a"><button type="button" class="btn sm" id="sbVer">Ver detalhes</button><button type="button" class="btn ghost sm" id="sbLimpar">Limpar</button></span>`;
+    $("sbVer").onclick = () => vaiPara("sim", "sRes"); $("sbLimpar").onclick = () => { SIM.itens = []; simSave(); renderAll(); };
+  }
+  function abrirSimRapida(alvo) {
+    fecharSimRapida(); const h = alvo.querySelector("h2, h3"), tit = h ? h.textContent.trim() : "este quadro";
+    const ov = document.createElement("div"); ov.className = "qs-ov"; ov.innerHTML = `<form class="qs" id="qsF"><div class="row-between"><h3>🧪 Simular a partir de “${esc(tit.slice(0, 40))}”</h3><button type="button" class="btn ghost sm" id="qsX">✕</button></div>
+      <p class="muted small">Teste antes de fazer. É uma prévia: a planilha não muda.</p>
+      <div class="qs-g"><div class="f"><label>O que</label><select id="qsT"><option value="pix">Compra no débito/Pix</option><option value="cartao">Compra no cartão</option><option value="div">Nova dívida (parcela mensal)</option></select></div>
+      <div class="f"><label id="qsVl">Valor total (R$)</label><input id="qsV" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="ex.: 600"></div>
+      <div class="f"><label>Nº de vezes</label><input id="qsN" type="number" inputmode="numeric" min="1" max="60" value="1"></div>
+      <div class="f"><label>Mês</label><select id="qsM">${DATA.meses.filter((k) => k >= DATA.planIni && DATA.plano[k]).map((k) => `<option value="${k}" ${k === SIM_DEF ? "selected" : ""}>${lab(k)}</option>`).join("")}</select></div>
+      <div class="f wide"><label>Descrição (opcional)</label><input id="qsD" type="text" placeholder="ex.: tênis"></div></div>
+      <div id="qsOut" class="qs-out"></div>
+      <div class="qs-a"><button class="btn" type="submit">Ver prévia</button><button class="btn ghost" type="button" id="qsDesf" hidden>Desfazer</button><button class="btn ghost" type="button" id="qsOk" hidden>Manter na simulação</button></div></form>`;
+    document.body.appendChild(ov); setTimeout(() => $("qsV").focus(), 50);
+    let ult = null;
+    $("qsT").onchange = () => { $("qsVl").textContent = $("qsT").value === "div" ? "Valor da parcela (R$)" : "Valor total (R$)"; if ($("qsT").value === "div" && +$("qsN").value < 2) $("qsN").value = 12; };
+    $("qsX").onclick = fecharSimRapida; ov.addEventListener("click", (e) => { if (e.target === ov) fecharSimRapida(); });
+    $("qsDesf").onclick = () => { if (ult) { SIM.itens = SIM.itens.filter((x) => x.id !== ult); simSave(); ult = null; renderAll(); } $("qsOut").innerHTML = ""; $("qsDesf").hidden = $("qsOk").hidden = true; };
+    $("qsOk").onclick = fecharSimRapida;
+    $("qsF").addEventListener("submit", (e) => { e.preventDefault(); const t = $("qsT").value, v = +$("qsV").value || 0; if (!v) return;
+      const antes = simCalc().linhas;
+      if (ult) SIM.itens = SIM.itens.filter((x) => x.id !== ult);
+      const it = novoItem(t === "div" ? "div" : "compra"); it.valor = v; it.n = Math.max(1, +$("qsN").value || 1); it.mes = $("qsM").value; it.desc = $("qsD").value || "Simulação rápida";
+      if (t === "pix") it.cartao = PIX; SIM.itens.push(it); ult = it.id; simSave();
+      const depois = simCalc().linhas, cb = cobrancas(it).lista.map((c) => c.row), ms = [...new Set(cb)].filter((m) => depois.some((x) => x.k === m));
+      const u0 = antes[antes.length - 1], u1 = depois[depois.length - 1];
+      const piores = ms.map((m) => { const a0 = antes.find((x) => x.k === m) || {}, a1 = depois.find((x) => x.k === m) || {}; return { m, a: a0.tetoD ?? a0.tetoA, d: a1.tetoD }; });
+      const estoura = piores.some((x) => x.d < -0.005);
+      $("qsOut").innerHTML = `<div class="qs-res ${estoura ? "no" : "ok"}"><b>${estoura ? "⚠️ Não cabe: algum mês fica no vermelho" : "✅ Cabe no planejamento"}</b>
+        <table class="tbl"><tr><th>Dinheiro de</th><th>Livre antes</th><th>Livre depois</th></tr>${piores.slice(0, 6).map((x) => `<tr><td>${lab(addM(x.m, 1))}</td><td>${R(x.a)}</td><td class="${x.d < 0 ? "neg" : "pos"}">${R(x.d)}</td></tr>`).join("")}</table>
+        <p class="small">Reserva em ${lab(u1.k)}: ${R0(u0.accD)} → <b>${R0(u1.accD)}</b></p></div>`;
+      $("qsDesf").hidden = $("qsOk").hidden = false; renderAll(); });
+  }
+  function fecharSimRapida() { const o = document.querySelector(".qs-ov"); if (o) o.remove(); }
+
+  // ================= ASSINATURAS: prévia de cancelamento =================
+  let ASS_OFF = new Set(); try { ASS_OFF = new Set(JSON.parse(localStorage.getItem("ass-off") || "[]")); } catch (_) {}
+  const assOff = (n) => ASS_OFF.has(n);
+  const assSave = () => { try { localStorage.setItem("ass-off", JSON.stringify([...ASS_OFF])); } catch (_) {} };
+  function assToggle(n) { ASS_OFF.has(n) ? ASS_OFF.delete(n) : ASS_OFF.add(n); assSave(); }
+
+  // ================= TABELAS SEM ROLAGEM LATERAL =================
+  function rotulaTabelas() {
+    document.querySelectorAll("table.tbl").forEach((t) => {
+      const rows = [...t.rows]; const hr = rows.find((r) => r.querySelector("th")); if (!hr) return;
+      const heads = []; [...hr.cells].forEach((c) => { for (let i = 0; i < (c.colSpan || 1); i++) heads.push(c.textContent.trim()); });
+      t.classList.toggle("tstack", heads.length >= 4); t.classList.toggle("wide", heads.length >= 8); t.classList.toggle("xwide", heads.length >= 11); hr.classList.add("hrow");
+      rows.forEach((r) => { if (r === hr || r.querySelector("th")) return; let i = 0; [...r.cells].forEach((c) => { if (!c.dataset.label) c.dataset.label = heads[i] || ""; if ((c.colSpan || 1) > 1) c.classList.add("span"); i += c.colSpan || 1; }); });
+    });
   }
 
   // ---------- VR (Flash) ----------
@@ -886,27 +1158,30 @@
   async function capturaImagem(alvo, modo, nome, st) {
     const msg = (t) => { if (st) st.textContent = t; else toast(t); };
     try { msg("Gerando imagem…"); await carregaLib("html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
-      document.body.classList.add("capturando");
+      document.body.classList.add("capturando"); const mk = marcaRelatorio(alvo);
       const cv = await window.html2canvas(alvo, { backgroundColor: getComputedStyle(document.body).backgroundColor, scale: 2, width: alvo.scrollWidth, windowWidth: Math.max(alvo.scrollWidth + 40, window.innerWidth) });
-      document.body.classList.remove("capturando");
+      document.body.classList.remove("capturando"); mk.remove();
       const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
       if (modo === "copiar" && navigator.clipboard && window.ClipboardItem) { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); msg("Imagem copiada! É só colar."); }
       else { const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = (nome || "dashboard") + ".png"; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); msg(modo === "copiar" ? "Este navegador não deixa copiar: baixei a imagem." : "Imagem baixada."); }
-    } catch (e) { document.body.classList.remove("capturando"); msg("Não consegui gerar a imagem. Use o print ou o PDF."); }
+    } catch (e) { document.body.classList.remove("capturando"); document.querySelectorAll(".cap-brand").forEach((x) => x.remove()); msg("Não consegui gerar a imagem. Use o print ou o PDF."); }
   }
-  function imprimeAlvo(alvo) { alvo.classList.add("print-alvo"); document.body.classList.add("print-one"); window.print(); setTimeout(() => { document.body.classList.remove("print-one"); alvo.classList.remove("print-alvo"); }, 600); }
+  function marcaRelatorio(alvo) { const d = document.createElement("div"); d.className = "cap-brand";
+    d.innerHTML = `<img src="img/marca.png" alt=""><div><b>Controle Financeiro</b><span>Nathan · ${fmtD(new Date())}</span></div>`; alvo.insertBefore(d, alvo.firstChild); return d; }
+  function imprimeAlvo(alvo) { const mk = marcaRelatorio(alvo); setTimeout(() => mk.remove(), 900); alvo.classList.add("print-alvo"); document.body.classList.add("print-one"); window.print(); setTimeout(() => { document.body.classList.remove("print-one"); alvo.classList.remove("print-alvo"); }, 600); }
   function toast(t) { let el = document.querySelector(".toast"); if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); } el.textContent = t; el.classList.add("on"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("on"), 2500); }
   const slug = (t) => txt(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
   function poeExport(alvo) {
     if (!alvo || alvo.hidden || alvo.querySelector(":scope > .exp-bar")) return;
     const bar = document.createElement("div"); bar.className = "exp-bar";
-    bar.innerHTML = `<button type="button" title="Copiar como imagem" data-x="copiar">📋</button><button type="button" title="Baixar imagem (PNG)" data-x="baixar">🖼️</button><button type="button" title="Imprimir / salvar PDF" data-x="pdf">PDF</button>`;
+    const podeSim = !alvo.closest("#tab-sim") && !alvo.closest(".zoomov");
+    bar.innerHTML = (podeSim ? `<button type="button" title="Simular uma compra ou dívida a partir daqui" data-x="sim">🧪</button>` : "") + `<button type="button" title="Copiar como imagem" data-x="copiar">📋</button><button type="button" title="Baixar imagem (PNG)" data-x="baixar">🖼️</button><button type="button" title="Imprimir / salvar PDF" data-x="pdf">PDF</button>`;
     bar.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; e.stopPropagation();
       const h = alvo.querySelector("h2, h3"), nome = slug((h ? h.textContent : "quadro") + " " + lab(F.mes));
-      if (b.dataset.x === "pdf") imprimeAlvo(alvo); else capturaImagem(alvo, b.dataset.x, nome); });
+      if (b.dataset.x === "sim") abrirSimRapida(alvo); else if (b.dataset.x === "pdf") imprimeAlvo(alvo); else capturaImagem(alvo, b.dataset.x, nome); });
     alvo.appendChild(bar);
   }
-  function exportaTudo() { document.querySelectorAll("section.card").forEach(poeExport); }
+  function exportaTudo() { document.querySelectorAll("section.card, .grid2 > .card, .ov-grid > .card").forEach(poeExport); }
   async function extratoImagem(modo) {
     const el = $("extrato"), st = $("extStatus");
     try { st.textContent = "Gerando imagem…"; await carregaLib("html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
@@ -1022,10 +1297,14 @@
     // assinaturas
     const as = DATA.mc.ass, tot = as.reduce((s, a) => s + a.valor, 0), ano = as.reduce((s, a) => s + a.ano, 0);
     const eco = as.filter((a) => a.manter === "Não").reduce((s, a) => s + a.ano, 0), aval = as.filter((a) => a.manter === "Avaliar").reduce((s, a) => s + a.ano, 0);
+    const off = as.filter((a) => assOff(a.nome)), ecoM = off.reduce((s, a) => s + a.valor, 0), ecoA = off.reduce((s, a) => s + a.ano, 0);
     $("assResumo").textContent = `${as.length} assinaturas · ${R(tot)}/mês · ${R0(ano)} nos próximos 12 meses`;
-    $("tAss").innerHTML = `<tr><th>Assinatura</th><th>Paga com</th><th>Por mês</th><th>Próximos 12 meses</th><th>Até</th><th>Manter?</th></tr>` +
-      as.slice().sort((a, b) => b.ano - a.ano).map((a) => `<tr><td>${esc(a.nome)}</td><td>${esc(a.paga)}</td><td>${R(a.valor)}</td><td>${R(a.ano)}</td><td>${/^\d{4}-\d\d$/.test(a.ate) ? lab(a.ate) : esc(a.ate)}</td><td><span class="tag ${a.manter === "Não" ? "bad" : a.manter === "Sim" ? "good" : ""}">${esc(a.manter)}</span></td></tr>`).join("") +
-      `<tr class="total"><td>Total</td><td></td><td>${R(tot)}</td><td>${R(ano)}</td><td></td><td></td></tr>`;
+    $("assEco").innerHTML = off.length ? `<div class="eco"><div><div class="l">Se cancelar ${off.length === 1 ? "esta" : "estas " + off.length}</div><div class="v pos">− ${R(ecoM)}/mês</div><div class="s">${R(ecoA)} nos próximos 12 meses · assinaturas passam de ${R(tot)} para <b>${R(tot - ecoM)}</b>/mês</div></div><button type="button" class="btn ghost sm" id="assReset">Manter todas de novo</button></div>` : "";
+    $("tAss").innerHTML = `<tr><th>Assinatura</th><th>Paga com</th><th>Por mês</th><th>Próximos 12 meses</th><th>Até</th><th>Na planilha</th><th>Manter?</th></tr>` +
+      as.slice().sort((a, b) => b.ano - a.ano).map((a) => { const o = assOff(a.nome); return `<tr class="${o ? "fora riscado" : ""}"><td>${esc(a.nome)}</td><td>${esc(a.paga)}</td><td>${R(a.valor)}</td><td>${R(a.ano)}</td><td>${/^\d{4}-\d\d$/.test(a.ate) ? lab(a.ate) : esc(a.ate)}</td><td><span class="tag ${a.manter === "Não" ? "bad" : a.manter === "Sim" ? "good" : ""}">${esc(a.manter)}</span></td><td><button type="button" class="sw ${o ? "" : "on"}" data-ass="${esc(a.nome)}" aria-pressed="${!o}"><i></i>${o ? "Cancelar" : "Manter"}</button></td></tr>`; }).join("") +
+      `<tr class="total"><td>Total</td><td></td><td>${off.length ? `<span class="muted">${R(tot)}</span> → ${R(tot - ecoM)}` : R(tot)}</td><td>${off.length ? `<span class="muted">${R(ano)}</span> → ${R(ano - ecoA)}` : R(ano)}</td><td></td><td></td><td></td></tr>`;
+    $("tAss").querySelectorAll("[data-ass]").forEach((b) => b.addEventListener("click", () => { assToggle(b.dataset.ass); renderMetas(); setTimeout(rotulaTabelas, 0); }));
+    if ($("assReset")) $("assReset").addEventListener("click", () => { ASS_OFF = new Set(); assSave(); renderMetas(); setTimeout(rotulaTabelas, 0); });
     $("assAviso").innerHTML = (eco ? `<span class="icon-ok">Cancelando as marcadas "Não" você economiza ${R0(eco)} em 12 meses.</span><br>` : "") +
       (aval ? `<span class="icon-warn">${R0(aval)} em 12 meses estão marcadas "Avaliar". Marque Sim ou Não na aba Metas e Cortes.</span>` : "");
     // recorrentes
@@ -1085,7 +1364,7 @@
       if (SIM.modo === "res") { tetoD = p.teto || 0; aindaD = aindaA; resD = (p.reserva || 0) - nova; }
       else {
         const espD = (p.espaco || 0) - nDiv;
-        tetoD = p.teto > 0 ? Math.max(0, Math.min(espD, Math.max(minMes, espD - (p.meta || 0)))) : 0;
+        tetoD = p.teto > 0 ? Math.max(0, Math.min(espD, p.teto, Math.max(minMes, p.teto - nDiv))) : 0;
         aindaD = tetoD - ja - nPool;
         const estouro = Math.max(0, nPool - Math.max(0, tetoD - ja));
         resD = espD - tetoD + shares - estouro;
@@ -1187,6 +1466,7 @@
         <td class="${l.tetoD < 0 ? "neg" : ""}">${ab(l.tetoA, l.tetoD)}</td><td class="${l.resD < 0 ? "neg" : ""}">${ab(l.resA, l.resD)}</td><td class="${l.accD < 0 ? "neg" : ""}">${ab(l.accA, l.accD)}</td><td class="${l.sobraD != null && l.sobraD < 0 ? "neg" : ""}">${l.sobraA == null ? "—" : ab(l.sobraA, l.sobraD)}</td></tr>`).join("");
   }
   function renderSim() { if (!SIM) SIM = simLoad(); renderSimEditor(); renderSimResultado(); }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharSimRapida(); });
   document.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => { SIM.itens.push(novoItem(b.dataset.add)); simSave(); renderSimEditor(); renderSimResultado(); }));
   $("sModo").addEventListener("change", (e) => { SIM.modo = e.target.value; simSave(); renderSimResultado(); });
   $("sLimpar").addEventListener("click", () => { SIM.itens = []; simSave(); renderSimEditor(); renderSimResultado(); });
@@ -1197,7 +1477,7 @@
     const H = (CFG.PASS_HASH || "").trim().toLowerCase(); let lembrado = null; try { lembrado = localStorage.getItem("dash-acesso"); } catch (_) {}
     if (H && lembrado === H) { document.body.classList.remove("travado"); load(); return; }
     const ov = document.createElement("div"); ov.className = "lock"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
-    ov.innerHTML = H ? `<form class="lock-box" id="lkF"><div class="logo-lk" aria-hidden="true">🔒</div><h2>Meu Financeiro</h2><p class="muted small">Digite a senha para ver o dashboard.</p>
+    ov.innerHTML = H ? `<form class="lock-box" id="lkF"><img class="logo-lk" src="img/logo.png" alt=""><h2>Controle Financeiro</h2><p class="muted small">Digite a senha para ver o dashboard.</p>
         <input type="password" id="lkS" autocomplete="current-password" placeholder="Senha" required><label class="lk-rem"><input type="checkbox" id="lkR" checked> Lembrar neste aparelho</label>
         <button class="btn" type="submit">Entrar</button><p class="lk-err" id="lkE" role="alert"></p></form>`
       : `<form class="lock-box" id="lkF"><div class="logo-lk" aria-hidden="true">🔑</div><h2>Criar senha</h2><p class="muted small">Ainda não há senha. Digite a senha que você quer usar e copie a linha gerada para o arquivo config.js no GitHub.</p>

@@ -3,52 +3,42 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meu Financeiro</title>
-<link rel="icon" href="data:,">
+<title>Controle Financeiro</title>
+<link rel="icon" href="img/marca.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script>try{var t=localStorage.getItem("dash-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=30">
 </head>
 <body class="travado">
+<div class="bg-fx" aria-hidden="true"><i></i><i></i><i></i></div>
 <header class="top">
-  <svg class="top-deco" viewBox="0 0 600 140" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
-    <g fill="currentColor">
-      <rect x="330" y="92" width="26" height="48" rx="5" opacity=".35"/><rect x="368" y="76" width="26" height="64" rx="5" opacity=".4"/>
-      <rect x="406" y="84" width="26" height="56" rx="5" opacity=".45"/><rect x="444" y="60" width="26" height="80" rx="5" opacity=".5"/>
-      <rect x="482" y="44" width="26" height="96" rx="5" opacity=".55"/><rect x="520" y="26" width="26" height="114" rx="5" opacity=".6"/>
-      <rect x="558" y="10" width="26" height="130" rx="5" opacity=".65"/>
-    </g>
-    <path d="M300 118 L343 96 L381 104 L419 80 L457 70 L495 50 L533 34 L571 14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
-  </svg>
   <div class="brand">
-    <div class="logo" aria-hidden="true">
-      <svg viewBox="0 0 48 48"><rect width="48" height="48" rx="13" fill="url(#lg)"/>
-        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a78d6"/><stop offset="1" stop-color="#1baf7a"/></linearGradient></defs>
-        <rect x="11" y="27" width="6" height="10" rx="1.5" fill="#fff" opacity=".75"/><rect x="21" y="21" width="6" height="16" rx="1.5" fill="#fff" opacity=".85"/><rect x="31" y="14" width="6" height="23" rx="1.5" fill="#fff"/>
-        <path d="M10 22 L20 15 L27 18 L38 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M33 9 H38 V14" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
+    <span class="marca-wrap"><img class="marca" src="img/marca.png" alt="" width="46" height="46"></span>
     <div>
-      <h1>Meu Financeiro</h1>
+      <h1>Controle Financeiro</h1>
       <p id="status" class="muted small">Carregando planilha…</p>
     </div>
   </div>
   <div class="top-spark" id="topSpark" hidden></div>
   <div class="actions">
     <select id="tema" aria-label="Tema">
-      <option value="auto">Tema: automático</option>
-      <option value="light">Tema: claro</option>
-      <option value="dark">Tema: escuro</option>
+      <option value="auto">🌓 Automático</option>
+      <option value="light">☀️ Claro</option>
+      <option value="dark">🌙 Escuro</option>
     </select>
     <a class="btn ghost" id="abrir" target="_blank" rel="noopener" hidden>Abrir planilha</a>
-    <button class="btn" id="reload">Atualizar do Google</button>
+    <button class="btn" id="reload">↻ Atualizar</button>
     <button class="btn ghost" id="sair" title="Bloquear e pedir a senha de novo">Sair 🔒</button>
   </div>
 </header>
 
 <nav class="tabs" role="tablist">
-  <button role="tab" data-tab="geral" class="on">Visão geral</button>
-  <button role="tab" data-tab="dividas">Dívidas e contas</button>
-  <button role="tab" data-tab="metas">Metas e cortes</button>
-  <button role="tab" data-tab="sim">Simulação</button>
+  <button role="tab" data-tab="geral" class="on"><span>📊</span> Visão geral</button>
+  <button role="tab" data-tab="dividas"><span>🧾</span> Contas e dívidas</button>
+  <button role="tab" data-tab="rend"><span>💰</span> Rendimentos</button>
+  <button role="tab" data-tab="metas"><span>🎯</span> Metas e cortes</button>
+  <button role="tab" data-tab="sim"><span>🧪</span> Simulação</button>
 </nav>
 
 <section class="filters" id="filtros" aria-label="Filtros">
@@ -66,13 +56,93 @@
     <select id="fUnid"><option value="rs">R$</option><option value="pct">% das entradas do mês</option></select></div>
 </section>
 
-<main>
-  <!-- ============ VISÃO GERAL ============ -->
-  <div class="tab" id="tab-geral">
-    <section class="card hoje" id="hoje"></section>
-    <section class="card contas"><div class="row-between"><h2>Contas do mês: pago x pendente</h2><p class="muted small" id="gResumo"></p></div><div id="gBody"></div></section>
+<div class="sim-banner" id="simBanner" hidden></div>
 
-    <section class="hero card">
+<main>
+  <!-- ============ VISÃO GERAL (só o consolidado) ============ -->
+  <div class="tab" id="tab-geral">
+    <section class="card sit" id="sit"></section>
+    <section class="ov-kpis" id="ovKpis"></section>
+    <section class="ov-grid">
+      <div class="card ov-c span2" data-fonte="metas|cardRenda"><div class="row-between"><h2>Entradas x saídas</h2><span class="muted small">por mês</span></div><div class="chart"><canvas id="ovFluxo"></canvas></div></div>
+      <div class="card ov-c" data-fonte="dividas|cardContas"><div class="row-between"><h2>Contas do mês</h2><span class="muted small" id="ovContasT"></span></div><div class="chart donut"><canvas id="ovContas"></canvas></div></div>
+      <div class="card ov-c" data-fonte="rend|rendCard"><div class="row-between"><h2>Rendimentos</h2><span class="muted small">por tipo</span></div><div class="chart"><canvas id="ovRend"></canvas></div></div>
+      <div class="card ov-c" data-fonte="metas|catCard"><div class="row-between"><h2>Para onde vai o dinheiro</h2><span class="muted small" id="ovCatT"></span></div><div class="chart donut"><canvas id="ovCat"></canvas></div></div>
+      <div class="card ov-c" data-fonte="metas|cardReserva"><div class="row-between"><h2>Reserva acumulada</h2><span class="muted small">prevista</span></div><div class="chart"><canvas id="ovRes"></canvas></div></div>
+      <div class="card ov-c" data-fonte="rend|cardReceber"><div class="row-between"><h2>A receber de terceiros</h2><span class="muted small" id="ovRecT"></span></div><div class="chart"><canvas id="ovRec"></canvas></div></div>
+      <div class="card ov-c span2" data-fonte="dividas|cardLibera"><div class="row-between"><h2>Parcelas acabando</h2><span class="muted small">minha parte por mês</span></div><div class="chart"><canvas id="ovLibera"></canvas></div></div>
+    </section>
+    <section class="card" id="ovAlertas"></section>
+  </div>
+
+  <!-- ============ CONTAS E DÍVIDAS (tudo que preciso pagar) ============ -->
+  <div class="tab" id="tab-dividas" hidden>
+    <section class="card" id="cardContas">
+      <div class="row-between"><h2>Contas do mês: pago x pendente</h2><p class="muted small" id="cResumo"></p></div>
+      <div id="cBody"></div>
+    </section>
+    <section class="grid2">
+      <div class="card" id="cardFaturas"><h2>Faturas por cartão</h2><div class="chart"><canvas id="cFaturas"></canvas></div></div>
+      <div class="card"><h2>Limite do Inter a configurar x fatura</h2><div class="chart"><canvas id="cLimite"></canvas></div></div>
+    </section>
+    <section class="card" id="itemCard" hidden>
+      <div class="row-between"><h2 id="itemTitulo">Item</h2><p class="muted small" id="itemInfo"></p></div>
+      <div class="kpis" id="itemKpis"></div>
+      <div class="chart"><canvas id="cItem"></canvas></div>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Contas fixas do mês</h2><p class="muted small" id="fResumo"></p></div>
+      <div class="tblwrap"><table class="tbl" id="tFixos"></table></div>
+    </section>
+    <section class="card" id="cardParc">
+      <div class="row-between"><h2>Parcelamentos</h2><p class="muted small" id="dResumo"></p></div>
+      <div class="chart tall"><canvas id="cDividas"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tDividas"></table></div>
+    </section>
+    <section class="card" id="cardLibera">
+      <div class="row-between"><h2>Quando as parcelas acabam</h2><span class="muted small">minha parte das parcelas, mês a mês</span></div>
+      <div class="chart"><canvas id="cLibera"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tLibera"></table></div>
+    </section>
+    <section class="card">
+      <div class="row-between"><h2>Compras do mês</h2><p class="muted small" id="lResumo"></p></div>
+      <div class="tblwrap"><table class="tbl" id="tLanc"></table></div>
+    </section>
+    <section class="card">
+      <h2>Previsto x realizado</h2>
+      <p class="muted small">Faturas: o que a planilha previa antes x o valor atual (ou o real, depois de fechada).</p>
+      <div class="tblwrap"><table class="tbl" id="tPrevFat"></table></div>
+      <p class="muted small" style="margin-top:14px">Gastos do dia a dia: planejado x lançado, por mês das compras.</p>
+      <div class="tblwrap"><table class="tbl" id="tPrevGasto"></table></div>
+    </section>
+  </div>
+
+  <!-- ============ RENDIMENTOS ============ -->
+  <div class="tab" id="tab-rend" hidden>
+    <section class="card" id="rendCard"><div class="row-between"><h2>Meus rendimentos — <span id="rendTit"></span></h2><span class="muted small">quanto eu ganho por mês, líquido</span></div>
+      <div class="kpis" id="rendKpis"></div>
+      <div id="rendDatas"></div>
+      <div class="chart"><canvas id="cRend"></canvas></div>
+      <div class="tblwrap"><table class="tbl" id="tRend"></table></div>
+      <p class="muted small">Salário = salário líquido do mês (com reajustes; no mês depois das férias ele vem menor, porque parte foi adiantada nas férias). Abono, retroativos e outras rendas vêm da aba Rendas Extras; 13º e férias da aba 13º e Férias. Reembolsos de terceiros ficam no quadro "A receber" abaixo.</p></section>
+    <section class="card vr" id="vrCard" hidden><div class="row-between"><h2>Flash (VR) — <span id="vrTit"></span></h2><span class="muted small">quanto posso usar</span></div><div id="vrBody"></div></section>
+    <section class="card" id="cardReceber">
+      <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><div class="cabe-in"><label class="muted small cabe-in">Pessoa <select id="recPessoa"></select></label><button type="button" class="btn sm" id="extBtn">📄 Extrato para enviar</button></div></div>
+      <div id="extrato" class="extrato" hidden></div>
+      <p class="muted small" id="rResumo"></p>
+      <div class="tblwrap"><table class="tbl" id="tReceber"></table></div>
+      <h3 class="h3">Recebido x pendente</h3>
+      <div class="tblwrap"><table class="tbl" id="tRecebido"></table></div>
+      <p id="recAviso"></p>
+      <h3 class="h3">Dívidas parceladas comigo: quanto já pagaram e quanto falta</h3>
+      <div class="tblwrap"><table class="tbl" id="tDevPessoa"></table></div>
+      <p class="muted small">Parcelas de antes de out/26 (início da planilha) contam como pagas. Contas fixas sem fim (aluguel, internet…) ficam só na tabela do mês acima.</p>
+    </section>
+  </div>
+
+  <!-- ============ METAS E CORTES (regras e planejamento) ============ -->
+  <div class="tab" id="tab-metas" hidden>
+    <section class="hero card" id="heroCard">
       <div class="hero-main">
         <p class="eyebrow">Posso gastar em <span id="hMes"></span> <span class="muted small">(no débito/Pix, dinheiro da conta)</span> <span id="hTag"></span></p>
         <p class="big" id="hRestante">—</p>
@@ -86,7 +156,6 @@
         <p class="muted small">Fica salvo só neste navegador.</p>
       </div>
     </section>
-
     <section class="card" id="cabeCard">
       <div class="row-between"><h2>Quanto cabe numa compra</h2>
         <label class="muted small cabe-in">Valor da compra <input id="cabeValor" type="number" step="0.01" min="0" placeholder="ex.: 600"></label></div>
@@ -95,106 +164,39 @@
       <div class="tblwrap"><table class="tbl" id="cabeMeses"></table></div>
     </section>
     <section class="card" id="saude"></section>
-    <section class="card"><div class="row-between"><h2>Compras do mês</h2><p class="muted small" id="gLResumo"></p></div><div class="tblwrap"><table class="tbl" id="gLanc"></table></div></section>
-    <section class="grid2" id="formas"></section>
+    <section class="kpis" id="kpis"></section>
     <section class="grid2">
       <div class="card"><div class="row-between"><h2>Ritmo do mês</h2><span class="muted small">gasto por dia x ritmo ideal</span></div><div class="chart"><canvas id="cRitmo"></canvas></div><p id="ritmoTxt"></p></div>
-      <div class="card"><div class="row-between"><h2>Limites por categoria</h2><span class="muted small" id="limResumo"></span></div><div id="limites"></div><p class="muted small">Limites na aba Metas e Cortes. Gasto = compras do mês na aba Lançamentos (sem VR, já sem reembolsos).</p></div>
+      <div class="card" id="cardLim"><div class="row-between"><h2>Limites por categoria</h2><span class="muted small" id="limResumo"></span></div><div id="limites"></div><p class="muted small">Limites na aba Metas e Cortes. Gasto = compras do mês na aba Lançamentos (sem VR, já sem reembolsos).</p></div>
     </section>
-    <section class="card vr" id="vrCard" hidden><div class="row-between"><h2>Flash (VR) — <span id="vrTit"></span></h2><span class="muted small">quanto posso usar</span></div><div id="vrBody"></div></section>
-    <section class="kpis" id="kpis"></section>
-
-    <section class="card" id="itemCard" hidden>
-      <div class="row-between"><h2 id="itemTitulo">Item</h2><p class="muted small" id="itemInfo"></p></div>
-      <div class="kpis" id="itemKpis"></div>
-      <div class="chart"><canvas id="cItem"></canvas></div>
-    </section>
-
-    <section class="grid2">
-      <div class="card"><h2>Estimativa do mês</h2><div class="tblwrap"><table class="tbl est" id="tEstimativa"></table></div></div>
-      <div class="card"><h2>Reserva de emergência</h2><div id="reserva"></div></div>
-    </section>
-
-    <section class="card" id="rendCard"><div class="row-between"><h2>Meus rendimentos — <span id="rendTit"></span></h2><span class="muted small">quanto eu ganho por mês, líquido</span></div>
-      <div class="kpis" id="rendKpis"></div>
-      <div class="chart"><canvas id="cRend"></canvas></div>
-      <div class="tblwrap"><table class="tbl" id="tRend"></table></div>
-      <p class="muted small">Salário = salário líquido do mês (com reajustes; no mês depois das férias ele vem menor, porque parte foi adiantada nas férias). Abono, retroativos e outras rendas vêm da aba Rendas Extras; 13º e férias da aba 13º e Férias. Reembolsos de terceiros não entram (não são renda).</p></section>
-    <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: teto do mês (cartão + Pix/débito, à vista ou parcelado) + 13º/férias livres + VR/Flash</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
-    <section class="grid2">
-      <div class="card"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>
-      <div class="card"><h2>Aporte na reserva x meta</h2><div class="chart"><canvas id="cAporte"></canvas></div></div>
-    </section>
-    <section class="grid2">
-      <div class="card"><h2>Limite do Inter a configurar x fatura</h2><div class="chart"><canvas id="cLimite"></canvas></div></div>
-      <div class="card"><h2>Faturas por cartão</h2><div class="chart"><canvas id="cFaturas"></canvas></div></div>
-    </section>
-    <section class="grid2">
-      <div class="card"><h2>Para onde vai o dinheiro</h2><p class="muted small">Valor cheio que sai da conta. Os reembolsos entram como entrada.</p><div class="chart"><canvas id="cRenda"></canvas></div></div>
-      <div class="card"><h2>Sobra do mês (antes das compras novas)</h2><div class="chart"><canvas id="cSobra"></canvas></div></div>
-    </section>
-    <section class="card" id="catCard">
-      <h2>Meu custo por categoria</h2><p class="muted small" id="catNota"></p>
-      <div class="chart tall"><canvas id="cCat"></canvas></div>
-    </section>
-  </div>
-
-  <!-- ============ DÍVIDAS E CONTAS ============ -->
-  <div class="tab" id="tab-dividas" hidden>
-    <section class="card">
-      <div class="row-between"><h2>Contas do mês: pago x pendente</h2><p class="muted small" id="cResumo"></p></div>
-      <div id="cBody"></div>
-    </section>
-    <section class="card">
-      <div class="row-between"><h2>A receber das pessoas em <span class="mesSel"></span></h2><div class="cabe-in"><label class="muted small cabe-in">Pessoa <select id="recPessoa"></select></label><button type="button" class="btn sm" id="extBtn">📄 Extrato para enviar</button></div></div>
-      <div id="extrato" class="extrato" hidden></div>
-      <p class="muted small" id="rResumo"></p>
-      <div class="tblwrap"><table class="tbl" id="tReceber"></table></div>
-      <h3 class="h3">Recebido x pendente</h3>
-      <div class="tblwrap"><table class="tbl" id="tRecebido"></table></div>
-      <p id="recAviso"></p>
-      <h3 class="h3">Dívidas parceladas comigo: quanto já pagaram e quanto falta</h3>
-      <div class="tblwrap"><table class="tbl" id="tDevPessoa"></table></div>
-      <p class="muted small">Parcelas de antes de out/26 (início da planilha) contam como pagas. Contas fixas sem fim (aluguel, internet…) ficam só na tabela do mês acima.</p>
-    </section>
-    <section class="card">
-      <div class="row-between"><h2>Contas fixas do mês</h2><p class="muted small" id="fResumo"></p></div>
-      <div class="tblwrap"><table class="tbl" id="tFixos"></table></div>
-    </section>
-    <section class="card">
-      <div class="row-between"><h2>Parcelamentos</h2><p class="muted small" id="dResumo"></p></div>
-      <div class="chart tall"><canvas id="cDividas"></canvas></div>
-      <div class="tblwrap"><table class="tbl" id="tDividas"></table></div>
-    </section>
-    <section class="card">
-      <div class="row-between"><h2>Quando as parcelas acabam</h2><span class="muted small">minha parte das parcelas, mês a mês</span></div>
-      <div class="chart"><canvas id="cLibera"></canvas></div>
-      <div class="tblwrap"><table class="tbl" id="tLibera"></table></div>
-    </section>
-    <section class="card">
-      <h2>Previsto x realizado</h2>
-      <p class="muted small">Faturas: o que a planilha previa antes x o valor atual (ou o real, depois de fechada).</p>
-      <div class="tblwrap"><table class="tbl" id="tPrevFat"></table></div>
-      <p class="muted small" style="margin-top:14px">Gastos do dia a dia: planejado x lançado, por mês das compras.</p>
-      <div class="tblwrap"><table class="tbl" id="tPrevGasto"></table></div>
-    </section>
-    <section class="card">
-      <div class="row-between"><h2>Compras do mês</h2><p class="muted small" id="lResumo"></p></div>
-      <div class="tblwrap"><table class="tbl" id="tLanc"></table></div>
-    </section>
-  </div>
-
-  <!-- ============ METAS E CORTES ============ -->
-  <div class="tab" id="tab-metas" hidden>
-    <section class="card">
+    <section class="card" id="cardMetas">
       <h2>Metas de reserva</h2>
       <p class="muted small">A reserva enche as metas na ordem de prioridade. Cadastre e edite na aba Metas e Cortes da planilha.</p>
       <div id="metas"></div>
       <div class="chart tall" style="margin-top:12px"><canvas id="cMetas"></canvas></div>
       <p class="muted small" id="rendNota"></p>
     </section>
-    <section class="card">
+    <section class="grid2">
+      <div class="card"><h2>Reserva de emergência</h2><div id="reserva"></div></div>
+      <div class="card"><h2>Estimativa do mês</h2><div class="tblwrap"><table class="tbl est" id="tEstimativa"></table></div></div>
+    </section>
+    <section class="grid2">
+      <div class="card" id="cardReserva"><h2>Reserva acumulada</h2><div class="chart"><canvas id="cReserva"></canvas></div></div>
+      <div class="card"><h2>Aporte na reserva x meta</h2><div class="chart"><canvas id="cAporte"></canvas></div></div>
+    </section>
+    <section class="card"><h2>Quanto posso gastar por mês</h2><p class="muted small">Mês das compras: teto do mês (cartão + Pix/débito, à vista ou parcelado) + 13º/férias livres + VR/Flash</p><div class="chart"><canvas id="cGastar"></canvas></div></section>
+    <section class="grid2">
+      <div class="card" id="cardRenda"><h2>Para onde vai o dinheiro</h2><p class="muted small">Valor cheio que sai da conta. Os reembolsos entram como entrada.</p><div class="chart"><canvas id="cRenda"></canvas></div></div>
+      <div class="card"><h2>Sobra do mês (antes das compras novas)</h2><div class="chart"><canvas id="cSobra"></canvas></div></div>
+    </section>
+    <section class="card" id="catCard">
+      <h2>Meu custo por categoria</h2><p class="muted small" id="catNota"></p>
+      <div class="chart tall"><canvas id="cCat"></canvas></div>
+    </section>
+    <section class="card" id="cardAss">
       <div class="row-between"><h2>Assinaturas</h2><span class="muted small" id="assResumo"></span></div>
+      <p class="muted small">Toque em "Manter?" para tirar uma assinatura da conta e ver quanto economizaria. É só uma prévia: a planilha não muda.</p>
+      <div id="assEco"></div>
       <div class="tblwrap"><table class="tbl" id="tAss"></table></div>
       <p id="assAviso"></p>
     </section>
@@ -209,7 +211,7 @@
   <div class="tab" id="tab-sim" hidden>
     <section class="card">
       <h2>O que você quer simular?</h2>
-      <p class="muted small">Teste uma compra ou dívida antes de fazer. Nada muda na planilha: a simulação fica só neste navegador. Compras no cartão em um mês são pagas com o salário do mês seguinte (5º dia útil).</p>
+      <p class="muted small">Teste uma compra ou dívida antes de fazer. Nada muda na planilha: a simulação fica só neste navegador e aparece como prévia (🧪) nos outros quadros. Compras no cartão em um mês são pagas com o salário do mês seguinte (5º dia útil).</p>
       <div id="sItens"></div>
       <div class="sim-add">
         <button type="button" class="btn" data-add="compra">+ Compra (cartão, Pix ou débito)</button>
@@ -230,7 +232,7 @@
     </div>
   </div>
 </main>
-<footer class="muted small">Os dados vêm da planilha. O mês de referência vira no 5º dia útil (sábado conta como dia útil, feriados não).</footer>
+<footer class="muted small"><img src="img/marca.png" alt="" width="18" height="18"> Controle Financeiro · os dados vêm da planilha. Salário no 5º dia útil (sábado conta; se cair no sábado, o pagamento vem na sexta antes).</footer>
 
 <script>
 /* Carrega as bibliotecas da pasta vendor/ ou, se não existir, da raiz do repositório */
