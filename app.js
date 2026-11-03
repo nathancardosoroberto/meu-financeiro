@@ -64,7 +64,8 @@
       D.extras.push({ ini, fim, desc: txt(r[1]), valor: v, vr: /VR|Flash/i.test(txt(r[6])) });
     });
     D.consumo = [];
-    if (wb.Sheets["Consumo"]) { const cr = rows(wb, "Consumo"), ch = findRow(cr, (t) => t === "Mês da conta");
+    const HS = wb.Sheets["Histórico de contas"] ? "Histórico de contas" : wb.Sheets["Consumo"] ? "Consumo" : null;
+    if (HS) { const cr = rows(wb, HS), ch = findRow(cr, (t) => t === "Mês da conta");
       if (ch >= 0) for (let i = ch + 1; i < cr.length; i++) { const r = cr[i]; if (!r) continue; const m = ym(r[0]); if (!m) continue;
         D.consumo.push({ mes: m, conta: txt(r[1]), ref: ym(r[2]), valor: num(r[3]), kwh: num(r[4]) }); } }
     D.d13 = { "11": toDate(cell(wb, "13º e Férias", "C13")), "12": toDate(cell(wb, "13º e Férias", "C15")) };
@@ -352,7 +353,7 @@
 
   // ---------- render ----------
   function renderAll() { if (!DATA) return; resumoFiltros(); renderTopo(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
-    if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else if (TAB === "metas") renderMetas(); else renderSim(); }
+    if (TAB === "geral") renderGeral(); else if (TAB === "dividas") renderDividas(); else if (TAB === "metas") renderMetas(); else renderSim(); setTimeout(exportaTudo, 0); }
 
   function renderTopo() {
     const ms = DATA.meses.filter((k) => DATA.plano[k]); if (ms.length < 2) return;
@@ -639,17 +640,22 @@
   // ---------- evolução de uma conta ----------
   const baseConta = (n) => txt(n).replace(/\s*\((jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/\d{2}\)$/i, "").trim();
   function serieConta(nome, tipo) {
-    const b = baseConta(nome), nb = norm(b);
-    return DATA.meses.filter((m) => m >= DATA.planIni).map((m) => {
+    const b = baseConta(nome), nb = norm(b), energia = /luz|energia/i.test(b);
+    const hist = (DATA.consumo || []).filter((x) => norm(baseConta(x.conta)) === nb);
+    const meses = [...new Set(hist.map((x) => x.mes).concat(DATA.meses.filter((m) => m >= DATA.planIni)))].sort();
+    return meses.map((m) => {
       let v = 0, real = false, est = false;
-      if (tipo === "Fatura") { const card = nome.replace(/^Fatura /, ""); v = (DATA.faturas[card] || [])[idx(m)] || 0; const f = DATA.fats.find((x) => x.card === card && x.mes === m); real = !!(f && f.status === "Fechada"); est = !real; }
-      else if (tipo === "Parcela") { const d = DATA.dividas.find((x) => x.desc === nome); if (d && ativo(d, m)) { v = d.valor; real = true; } }
-      else { const fs = DATA.fixos.filter((f) => norm(baseConta(f.desc)) === nb && ativo(f, m));
-        v = fs.reduce((s, f) => s + f.valor, 0); real = fs.some((f) => f.desc !== b); est = !real && /aluguel|condom|luz|energia/i.test(b); }
-      const pg = DATA.pagos.find((p) => p.mes === m && norm(baseConta(p.nome)) === nb);
-      if (pg && pg.valor) { v = pg.valor; real = true; est = false; }
-      const c = /luz|energia/i.test(b) ? (DATA.consumo || []).find((x) => x.mes === m && norm(baseConta(x.conta)) === nb) : null;
-      return { m, v, real, est, kwh: c && c.kwh ? c.kwh : null, ref: c ? c.ref : null };
+      if (m >= DATA.planIni) {
+        if (tipo === "Fatura") { const card = nome.replace(/^Fatura /, ""); v = (DATA.faturas[card] || [])[idx(m)] || 0; const f = DATA.fats.find((x) => x.card === card && x.mes === m); real = !!(f && f.status === "Fechada"); est = !real; }
+        else if (tipo === "Parcela") { const d = DATA.dividas.find((x) => x.desc === nome); if (d && ativo(d, m)) { v = d.valor; real = true; } }
+        else { const fs = DATA.fixos.filter((f) => norm(baseConta(f.desc)) === nb && ativo(f, m));
+          v = fs.reduce((s, f) => s + f.valor, 0); real = fs.some((f) => f.desc !== b); est = !real && /aluguel|condom|luz|energia/i.test(b); }
+        const pg = DATA.pagos.find((p) => p.mes === m && norm(baseConta(p.nome)) === nb);
+        if (pg && pg.valor) { v = pg.valor; real = true; est = false; }
+      }
+      const h = hist.find((x) => x.mes === m);
+      if (h && h.valor) { v = h.valor; real = true; est = false; }
+      return { m, v, real, est, kwh: energia && h && h.kwh ? h.kwh : null, ref: h ? h.ref : null };
     }).filter((x) => x.v > 0.004);
   }
   function abrirConta(nome, tipo, k) {
@@ -670,22 +676,26 @@
     if (energia) { const ek = ate.filter((x) => x.kwh), ue = ek[ek.length - 1];
       kpis.push(["Consumo (último)", ue ? ue.kwh + " kWh" : "—", ue ? "variação " + fP(ue.dk) : "mande o kWh das contas"], ["Preço por kWh", ue ? "R$ " + ue.rk.toFixed(3).replace(".", ",") : "—", ue ? "variação " + fP(ue.drk) : ""]); }
     ov.innerHTML = `<div class="zh"><h3>${esc(baseConta(nome))} — evolução mês a mês</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div>
-      <div class="zb"><div class="kpis">${kpis.map(([l, v, sb]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${/^[+-]/.test(v) ? cl(parseFloat(v.replace(",", ".").replace("%", ""))) : ""}">${v}</div><div class="s">${sb}</div></div>`).join("")}</div>
-      <div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<h3 class="h3">Consumo (kWh) e preço por kWh</h3><div class="chart"><canvas id="ctaC2"></canvas></div>` : ""}
+      <div class="zb"><h2 class="exp-tit">${esc(baseConta(nome))} — evolução mês a mês</h2><div class="kpis">${kpis.map(([l, v, sb]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${/^[+-]/.test(v) ? cl(parseFloat(v.replace(",", ".").replace("%", ""))) : ""}">${v}</div><div class="s">${sb}</div></div>`).join("")}</div>
+      <div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<h3 class="h3">Consumo (kWh) x valor da conta (R$)</h3><div class="chart"><canvas id="ctaC2"></canvas></div>` : ""}
       <div class="tblwrap"><table class="tbl"><tr><th>Mês</th><th>Valor</th><th>Variação</th><th>Tipo</th>${energia ? "<th>Referente a</th><th>kWh</th><th>Variação kWh</th><th>R$/kWh</th><th>Variação R$/kWh</th>" : ""}</tr>` +
       ate.map((x) => `<tr class="${x.m === k ? "sel" : ""}"><td>${lab(x.m)}</td><td>${R(x.v)}${x.est ? "*" : ""}</td><td class="${cl(x.dv)}">${fP(x.dv)}</td><td>${x.real ? "real" : "previsto"}</td>${energia ? `<td>${x.ref ? lab(x.ref) : "—"}</td><td>${x.kwh || "—"}</td><td class="${cl(x.dk)}">${fP(x.dk)}</td><td>${x.rk ? "R$ " + x.rk.toFixed(3).replace(".", ",") : "—"}</td><td class="${cl(x.drk)}">${fP(x.drk)}</td>` : ""}</tr>`).join("") +
-      `</table></div><p class="muted small">Variação = comparação com o mês anterior (vermelho = subiu, verde = caiu). * = valor previsto/estimado.${energia ? " Para o consumo, me mande o kWh de cada conta (fica na aba Consumo da planilha)." : ""}</p></div>`;
+      `</table></div><p class="muted small">Variação = comparação com o mês anterior (vermelho = subiu, verde = caiu). * = valor previsto/estimado.${energia ? " Consumo e contas antigas ficam na aba Histórico de contas da planilha." : ""}</p></div>`;
     document.body.appendChild(ov); document.body.style.overflow = "hidden"; $("zClose").addEventListener("click", fecharZoom);
+    const zb = ov.querySelector(".zb"); zb.classList.add("exp-alvo"); setTimeout(() => poeExport(zb), 0);
     const L = ate.map((x) => lab(x.m)), o1 = baseOpts(false, (v) => R0(v));
     o1.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--ink2"), callback: (v) => v + "%" } };
     draw("ctaC1", "bar", L, [ds("Valor", ate.map((x) => x.v), ate.map((x) => (x.real ? cor[0] : cor[0] + "66"))),
       { type: "line", label: "Variação %", data: ate.map((x) => (x.dv == null ? null : Math.round(x.dv * 1000) / 10)), yAxisID: "y1", borderColor: cor[1], backgroundColor: cor[1], borderWidth: 2, pointRadius: 4, tension: 0.2, spanGaps: true,
         datalabels: { align: "top", color: cor[1], formatter: (v) => (v == null ? "" : (v > 0 ? "+" : "") + String(v).replace(".", ",") + "%") } }], o1);
     if (energia) { const ek = ate.filter((x) => x.kwh), o2 = baseOpts(false, (v) => v + " kWh");
-      o2.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--ink2"), callback: (v) => "R$ " + Number(v).toFixed(2).replace(".", ",") } };
-      draw("ctaC2", "bar", ek.map((x) => lab(x.m)), [ds("Consumo (kWh)", ek.map((x) => x.kwh), cor[2]),
-        { type: "line", label: "R$ por kWh", data: ek.map((x) => Math.round(x.rk * 1000) / 1000), yAxisID: "y1", borderColor: cor[3], backgroundColor: cor[3], borderWidth: 2, pointRadius: 4,
-          datalabels: { align: "top", color: cor[3], formatter: (v) => "R$ " + Number(v).toFixed(3).replace(".", ",") } }], o2); }
+      o2.scales.y.title = { display: true, text: "kWh", color: css("--ink2") };
+      o2.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "R$", color: css("--ink2") }, ticks: { color: css("--ink2"), callback: (v) => R0(v) } };
+      o2.plugins.tooltip.callbacks.label = (c) => " " + c.dataset.label + ": " + (c.dataset.yAxisID === "y1" ? R(c.raw) : c.raw + " kWh");
+      o2.plugins.tooltip.callbacks.afterBody = (it) => { const x = ek[it[0].dataIndex]; return x ? "R$ por kWh: R$ " + x.rk.toFixed(3).replace(".", ",") : ""; };
+      draw("ctaC2", "bar", ek.map((x) => lab(x.m) + (x.ref ? " (cons. " + lab(x.ref) + ")" : "")), [ds("Consumo (kWh)", ek.map((x) => x.kwh), cor[2] + "CC"),
+        { type: "line", label: "Valor da conta (R$)", data: ek.map((x) => x.v), yAxisID: "y1", borderColor: cor[1], backgroundColor: cor[1], borderWidth: 2.5, pointRadius: 4, tension: 0.2,
+          datalabels: { align: "top", color: cor[1], formatter: (v) => R0(v) } }], o2); }
   }
 
   // ---------- VR (Flash) ----------
@@ -835,6 +845,31 @@
   let EXT_OPEN = false;
   function carregaLib(nome, cdn) { return new Promise((ok, err) => { if (window.html2canvas) return ok();
     const tries = ["vendor/" + nome, nome, cdn]; (function t(i) { if (i >= tries.length) return err(new Error("lib")); const s = document.createElement("script"); s.src = tries[i]; s.onload = () => ok(); s.onerror = () => t(i + 1); document.head.appendChild(s); })(0); }); }
+  // exportar qualquer quadro: copiar imagem / baixar imagem / PDF
+  async function capturaImagem(alvo, modo, nome, st) {
+    const msg = (t) => { if (st) st.textContent = t; else toast(t); };
+    try { msg("Gerando imagem…"); await carregaLib("html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+      document.body.classList.add("capturando");
+      const cv = await window.html2canvas(alvo, { backgroundColor: getComputedStyle(document.body).backgroundColor, scale: 2, width: alvo.scrollWidth, windowWidth: Math.max(alvo.scrollWidth + 40, window.innerWidth) });
+      document.body.classList.remove("capturando");
+      const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+      if (modo === "copiar" && navigator.clipboard && window.ClipboardItem) { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); msg("Imagem copiada! É só colar."); }
+      else { const u = URL.createObjectURL(blob), l = document.createElement("a"); l.href = u; l.download = (nome || "dashboard") + ".png"; l.click(); setTimeout(() => URL.revokeObjectURL(u), 2000); msg(modo === "copiar" ? "Este navegador não deixa copiar: baixei a imagem." : "Imagem baixada."); }
+    } catch (e) { document.body.classList.remove("capturando"); msg("Não consegui gerar a imagem. Use o print ou o PDF."); }
+  }
+  function imprimeAlvo(alvo) { alvo.classList.add("print-alvo"); document.body.classList.add("print-one"); window.print(); setTimeout(() => { document.body.classList.remove("print-one"); alvo.classList.remove("print-alvo"); }, 600); }
+  function toast(t) { let el = document.querySelector(".toast"); if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); } el.textContent = t; el.classList.add("on"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("on"), 2500); }
+  const slug = (t) => txt(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  function poeExport(alvo) {
+    if (!alvo || alvo.hidden || alvo.querySelector(":scope > .exp-bar")) return;
+    const bar = document.createElement("div"); bar.className = "exp-bar";
+    bar.innerHTML = `<button type="button" title="Copiar como imagem" data-x="copiar">📋</button><button type="button" title="Baixar imagem (PNG)" data-x="baixar">🖼️</button><button type="button" title="Imprimir / salvar PDF" data-x="pdf">PDF</button>`;
+    bar.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; e.stopPropagation();
+      const h = alvo.querySelector("h2, h3"), nome = slug((h ? h.textContent : "quadro") + " " + lab(F.mes));
+      if (b.dataset.x === "pdf") imprimeAlvo(alvo); else capturaImagem(alvo, b.dataset.x, nome); });
+    alvo.appendChild(bar);
+  }
+  function exportaTudo() { document.querySelectorAll("section.card").forEach(poeExport); }
   async function extratoImagem(modo) {
     const el = $("extrato"), st = $("extStatus");
     try { st.textContent = "Gerando imagem…"; await carregaLib("html2canvas.min.js", "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");

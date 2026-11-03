@@ -241,3 +241,21 @@ body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body
 tr.clic{cursor:pointer} tr.clic:hover td{background:var(--barbg)}
 .zoomov .zb .chart{height:300px;margin-bottom:12px}
 .zoomov .tbl tr.sel td{background:var(--barbg);font-weight:600}
+
+section.card{position:relative}
+.exp-bar{position:absolute;bottom:8px;right:10px;display:flex;gap:4px;opacity:.35;transition:opacity .15s;z-index:3}
+section.card:hover>.exp-bar,.zb:hover>.exp-bar,.exp-bar:focus-within{opacity:1}
+.exp-bar button{border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:8px;font:inherit;font-size:12px;padding:3px 7px;cursor:pointer}
+.exp-bar button:hover{background:var(--barbg)}
+.zb.exp-alvo{position:relative}
+.capturando .exp-bar,.capturando .zoom{display:none!important}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:.2s;z-index:99;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%)}
+@media print{body.print-one *{visibility:hidden} body.print-one .print-alvo,body.print-one .print-alvo *{visibility:visible} body.print-one .print-alvo{position:absolute;left:0;top:0;width:100%} body.print-one .exp-bar,body.print-one .zoom{display:none!important}}
+@media (hover:none){.exp-bar{opacity:.8}}
+section.card{padding-bottom:40px}
+
+.exp-tit{display:none;margin:0 0 10px}
+.capturando .exp-tit,body.print-one .print-alvo .exp-tit{display:block}
+.capturando .tblwrap{overflow:visible}
+@media print{body.print-one .print-alvo .tblwrap{overflow:visible} body.print-one .zoomov{position:static} body.print-one .zoomov .zb{overflow:visible}}
