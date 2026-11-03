@@ -259,3 +259,10 @@ section.card{padding-bottom:40px}
 .capturando .exp-tit,body.print-one .print-alvo .exp-tit{display:block}
 .capturando .tblwrap{overflow:visible}
 @media print{body.print-one .print-alvo .tblwrap{overflow:visible} body.print-one .zoomov{position:static} body.print-one .zoomov .zb{overflow:visible}}
+
+.cta-exp{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 14px;background:var(--card,var(--bg))}
+.cta-exp:empty{display:none}
+.cta-exp-t{font-size:15px;margin-bottom:4px}
+.cta-exp-s{margin:6px 0}
+.cta-exp-tb{margin:8px 0}
+.cta-exp-tb td,.cta-exp-tb th{white-space:nowrap}

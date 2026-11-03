@@ -677,25 +677,62 @@
       kpis.push(["Consumo (último)", ue ? ue.kwh + " kWh" : "—", ue ? "variação " + fP(ue.dk) : "mande o kWh das contas"], ["Preço por kWh", ue ? "R$ " + ue.rk.toFixed(3).replace(".", ",") : "—", ue ? "variação " + fP(ue.drk) : ""]); }
     ov.innerHTML = `<div class="zh"><h3>${esc(baseConta(nome))} — evolução mês a mês</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div>
       <div class="zb"><h2 class="exp-tit">${esc(baseConta(nome))} — evolução mês a mês</h2><div class="kpis">${kpis.map(([l, v, sb]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${/^[+-]/.test(v) ? cl(parseFloat(v.replace(",", ".").replace("%", ""))) : ""}">${v}</div><div class="s">${sb}</div></div>`).join("")}</div>
-      <div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<h3 class="h3">Consumo (kWh) x valor da conta (R$)</h3><div class="chart"><canvas id="ctaC2"></canvas></div>` : ""}
+      ${energia ? `<h3 class="h3">Valor da conta (R$) x consumo (kWh)</h3>` : ""}<div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<div id="ctaExp" class="cta-exp"></div>` : ""}
       <div class="tblwrap"><table class="tbl"><tr><th>Mês</th><th>Valor</th><th>Variação</th><th>Tipo</th>${energia ? "<th>Referente a</th><th>kWh</th><th>Variação kWh</th><th>R$/kWh</th><th>Variação R$/kWh</th>" : ""}</tr>` +
-      ate.map((x) => `<tr class="${x.m === k ? "sel" : ""}"><td>${lab(x.m)}</td><td>${R(x.v)}${x.est ? "*" : ""}</td><td class="${cl(x.dv)}">${fP(x.dv)}</td><td>${x.real ? "real" : "previsto"}</td>${energia ? `<td>${x.ref ? lab(x.ref) : "—"}</td><td>${x.kwh || "—"}</td><td class="${cl(x.dk)}">${fP(x.dk)}</td><td>${x.rk ? "R$ " + x.rk.toFixed(3).replace(".", ",") : "—"}</td><td class="${cl(x.drk)}">${fP(x.drk)}</td>` : ""}</tr>`).join("") +
+      ate.map((x) => `<tr class="${x.m === k ? "sel" : ""}${energia && x.kwh ? " clic" : ""}" data-m="${x.m}"><td>${lab(x.m)}</td><td>${R(x.v)}${x.est ? "*" : ""}</td><td class="${cl(x.dv)}">${fP(x.dv)}</td><td>${x.real ? "real" : "previsto"}</td>${energia ? `<td>${x.ref ? lab(x.ref) : "—"}</td><td>${x.kwh || "—"}</td><td class="${cl(x.dk)}">${fP(x.dk)}</td><td>${x.rk ? "R$ " + x.rk.toFixed(3).replace(".", ",") : "—"}</td><td class="${cl(x.drk)}">${fP(x.drk)}</td>` : ""}</tr>`).join("") +
       `</table></div><p class="muted small">Variação = comparação com o mês anterior (vermelho = subiu, verde = caiu). * = valor previsto/estimado.${energia ? " Consumo e contas antigas ficam na aba Histórico de contas da planilha." : ""}</p></div>`;
     document.body.appendChild(ov); document.body.style.overflow = "hidden"; $("zClose").addEventListener("click", fecharZoom);
     const zb = ov.querySelector(".zb"); zb.classList.add("exp-alvo"); setTimeout(() => poeExport(zb), 0);
     const L = ate.map((x) => lab(x.m)), o1 = baseOpts(false, (v) => R0(v));
     o1.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--ink2"), callback: (v) => v + "%" } };
-    draw("ctaC1", "bar", L, [ds("Valor", ate.map((x) => x.v), ate.map((x) => (x.real ? cor[0] : cor[0] + "66"))),
+    if (!energia) draw("ctaC1", "bar", L, [ds("Valor", ate.map((x) => x.v), ate.map((x) => (x.real ? cor[0] : cor[0] + "66"))),
       { type: "line", label: "Variação %", data: ate.map((x) => (x.dv == null ? null : Math.round(x.dv * 1000) / 10)), yAxisID: "y1", borderColor: cor[1], backgroundColor: cor[1], borderWidth: 2, pointRadius: 4, tension: 0.2, spanGaps: true,
         datalabels: { align: "top", color: cor[1], formatter: (v) => (v == null ? "" : (v > 0 ? "+" : "") + String(v).replace(".", ",") + "%") } }], o1);
-    if (energia) { const ek = ate.filter((x) => x.kwh), o2 = baseOpts(false, (v) => v + " kWh");
-      o2.scales.y.title = { display: true, text: "kWh", color: css("--ink2") };
-      o2.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "R$", color: css("--ink2") }, ticks: { color: css("--ink2"), callback: (v) => R0(v) } };
-      o2.plugins.tooltip.callbacks.label = (c) => " " + c.dataset.label + ": " + (c.dataset.yAxisID === "y1" ? R(c.raw) : c.raw + " kWh");
-      o2.plugins.tooltip.callbacks.afterBody = (it) => { const x = ek[it[0].dataIndex]; return x ? "R$ por kWh: R$ " + x.rk.toFixed(3).replace(".", ",") : ""; };
-      draw("ctaC2", "bar", ek.map((x) => lab(x.m) + (x.ref ? " (cons. " + lab(x.ref) + ")" : "")), [ds("Consumo (kWh)", ek.map((x) => x.kwh), cor[2] + "CC"),
-        { type: "line", label: "Valor da conta (R$)", data: ek.map((x) => x.v), yAxisID: "y1", borderColor: cor[1], backgroundColor: cor[1], borderWidth: 2.5, pointRadius: 4, tension: 0.2,
-          datalabels: { align: "top", color: cor[1], formatter: (v) => R0(v) } }], o2); }
+    if (energia) { const ek = ate.filter((x) => x.kwh), o2 = baseOpts(false, (v) => R0(v));
+      o2.scales.y.title = { display: true, text: "Valor (R$)", color: cor[0] };
+      const mx = Math.max(...ek.map((x) => x.kwh), 1);
+      o2.scales.y1 = { position: "right", min: 0, suggestedMax: mx * 1.12, grid: { drawOnChartArea: false }, title: { display: true, text: "Consumo (kWh)", color: cor[2] }, ticks: { color: css("--ink2"), callback: (v) => v + " kWh" } };
+      o2.scales.y.suggestedMax = Math.max(...ate.map((x) => x.v)) * 1.7;
+      o2.plugins.tooltip.callbacks.label = (c) => " " + c.dataset.label + ": " + (c.dataset.yAxisID === "y1" ? (c.raw == null ? "sem dado" : c.raw + " kWh") : R(c.raw));
+      o2.plugins.tooltip.callbacks.afterBody = (it) => { const x = ate[it[0].dataIndex]; if (!x) return "";
+        const l = []; if (x.rk) l.push("R$ por kWh: R$ " + x.rk.toFixed(3).replace(".", ",")); if (x.dv != null) l.push("Variação do valor: " + fP(x.dv)); if (x.dk != null) l.push("Variação do consumo: " + fP(x.dk));
+        if (x.ref) l.push("Consumo referente a " + lab(x.ref)); if (!x.real) l.push("Valor previsto"); return l; };
+      draw("ctaC1", "bar", L, [ds("Valor da conta (R$)", ate.map((x) => x.v), ate.map((x) => (x.real ? cor[0] : cor[0] + "66")), { datalabels: { anchor: "end", align: "end", formatter: (v) => R0(v) } }),
+        { type: "line", label: "Consumo (kWh)", data: ate.map((x) => x.kwh || null), yAxisID: "y1", borderColor: cor[2], backgroundColor: cor[2], borderWidth: 3, pointRadius: 5, tension: 0.2, spanGaps: false,
+          datalabels: { align: "top", offset: 6, color: "#fff", backgroundColor: cor[2], borderRadius: 4, padding: { top: 2, bottom: 2, left: 5, right: 5 }, font: { weight: "600", size: 11 }, formatter: (v) => (v == null ? "" : v + " kWh") } }], o2);
+      const explica = (m) => {
+        const i = ate.findIndex((x) => x.m === m), x = ate[i], box = $("ctaExp"); if (!box || !x) return;
+        ov.querySelectorAll("tr[data-m]").forEach((tr) => tr.classList.toggle("sel", tr.dataset.m === m));
+        const p = ate.slice(0, i).reverse().find((z) => z.kwh);
+        if (!x.kwh) { box.innerHTML = `<b>${lab(m)}</b> — valor ${x.real ? "real" : "previsto"} de ${R(x.v)}. Sem kWh desse mês ainda, então não dá para separar consumo e preço. Mande a conta quando chegar.`; return; }
+        if (!p) { box.innerHTML = `<b>${lab(m)}</b> — ${x.kwh} kWh a R$ ${x.rk.toFixed(3).replace(".", ",")} por kWh = ${R(x.v)}. É o primeiro mês com kWh, sem mês anterior para comparar.`; return; }
+        const pk = p.v / p.kwh, dV = x.v - p.v, efC = (x.kwh - p.kwh) * pk, efP = (x.rk - pk) * x.kwh;
+        const up = (v) => v > 0.0005, dn = (v) => v < -0.0005, dk = x.kwh - p.kwh, dr = x.rk - pk;
+        const sg = (v, f) => (v > 0 ? "+" : v < 0 ? "−" : "") + f(Math.abs(v));
+        let tit, ic;
+        if (up(dk) && up(dr)) { tit = "Gastou mais energia e o kWh ficou mais caro"; ic = "🔺🔺"; }
+        else if (dn(dk) && dn(dr)) { tit = "Gastou menos energia e o kWh ficou mais barato"; ic = "🔻🔻"; }
+        else if (dn(dk) && up(dr)) { tit = dV > 0 ? "Pagou mais caro, mesmo reduzindo o consumo" : "Reduziu o consumo e isso compensou o kWh mais caro"; ic = "🔻🔺"; }
+        else if (up(dk) && dn(dr)) { tit = dV > 0 ? "Pagou mais porque aumentou o consumo (o kWh até ficou mais barato)" : "Pagou mais barato, mesmo aumentando o consumo"; ic = "🔺🔻"; }
+        else if (up(dk) || dn(dk)) { tit = up(dk) ? "Consumiu mais, com o mesmo preço do kWh" : "Consumiu menos, com o mesmo preço do kWh"; ic = up(dk) ? "🔺" : "🔻"; }
+        else { tit = up(dr) ? "Mesmo consumo, mas o kWh ficou mais caro" : dn(dr) ? "Mesmo consumo, e o kWh ficou mais barato" : "Nada mudou em relação ao mês anterior"; ic = "="; }
+        const tot = Math.abs(efC) + Math.abs(efP), shC = tot ? Math.abs(efC) / tot : 0;
+        const motivo = !tot ? "" : shC >= 0.65 ? "O que mais pesou foi o <b>consumo</b>" : shC <= 0.35 ? "O que mais pesou foi o <b>preço do kWh</b>" : "<b>Consumo e preço</b> pesaram parecido";
+        const c = (v) => (v > 0.005 ? "neg" : v < -0.005 ? "pos" : "");
+        box.innerHTML = `<div class="cta-exp-t">${ic} <b>${lab(m)}: ${tit}</b></div>
+          <div class="cta-exp-s">Comparado com ${lab(p.m)}: a conta foi de ${R(p.v)} para ${R(x.v)} (<span class="${c(dV)}">${sg(dV, R)}, ${fP(pct(p.v, x.v))}</span>).</div>
+          <table class="tbl cta-exp-tb"><tr><th>Motivo</th><th>Mudança</th><th>Impacto na conta</th><th>Peso</th></tr>
+          <tr><td>⚡ Consumo</td><td>${p.kwh} → ${x.kwh} kWh (${fP(pct(p.kwh, x.kwh))})</td><td class="${c(efC)}">${sg(efC, R)}</td><td>${tot ? Math.round(shC * 100) + "%" : "—"}</td></tr>
+          <tr><td>💲 Preço do kWh</td><td>R$ ${pk.toFixed(3).replace(".", ",")} → R$ ${x.rk.toFixed(3).replace(".", ",")} (${fP(pct(pk, x.rk))})</td><td class="${c(efP)}">${sg(efP, R)}</td><td>${tot ? 100 - Math.round(shC * 100) + "%" : "—"}</td></tr>
+          <tr><td><b>Total</b></td><td></td><td class="${c(dV)}"><b>${sg(dV, R)}</b></td><td></td></tr></table>
+          <div class="cta-exp-s">${motivo}${motivo ? ". " : ""}Se o kWh tivesse ficado no preço de ${lab(p.m)}, essa conta seria ${R(x.kwh * pk)}.</div>
+          <div class="muted small">Clique em outra coluna do gráfico ou linha da tabela para ver outro mês.</div>`;
+      };
+      const ligaClique = (id, lista) => { const ch = charts[id]; if (!ch) return; $(id).onclick = null; $(id).style.cursor = "pointer";
+        ch.options.onClick = (e, els) => { const el = els && els[0]; if (el) explica(lista[el.index].m); }; ch.update("none"); };
+      ligaClique("ctaC1", ate);
+      ov.querySelectorAll("tr.clic[data-m]").forEach((tr) => tr.addEventListener("click", () => explica(tr.dataset.m)));
+      const ini = ek.find((x) => x.m === k) || ek[ek.length - 1]; if (ini) explica(ini.m); }
   }
 
   // ---------- VR (Flash) ----------
