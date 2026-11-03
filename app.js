@@ -63,6 +63,10 @@
       const rec = txt(r[3]) === "Sim", fim = rec ? ym(r[4]) || "9999-12" : ini;
       D.extras.push({ ini, fim, desc: txt(r[1]), valor: v, vr: /VR|Flash/i.test(txt(r[6])) });
     });
+    D.consumo = [];
+    if (wb.Sheets["Consumo"]) { const cr = rows(wb, "Consumo"), ch = findRow(cr, (t) => t === "Mês da conta");
+      if (ch >= 0) for (let i = ch + 1; i < cr.length; i++) { const r = cr[i]; if (!r) continue; const m = ym(r[0]); if (!m) continue;
+        D.consumo.push({ mes: m, conta: txt(r[1]), ref: ym(r[2]), valor: num(r[3]), kwh: num(r[4]) }); } }
     D.d13 = { "11": toDate(cell(wb, "13º e Férias", "C13")), "12": toDate(cell(wb, "13º e Férias", "C15")) };
     D.reservaInformada = num(cell(wb, C, "B5")); D.pct = num(cell(wb, C, "B6")); D.meta = D.pct > 1 ? D.pct : 0; D.planIni = ym(cell(wb, C, "B8")) || D.ini;
     D.cartoes = []; D.venc = {};
@@ -628,8 +632,60 @@
         <div class="kpi"><div class="l">Falta pagar</div><div class="v ${tF > 0.005 ? "neg" : ""}">${R(tF)}</div><div class="s">${pend.length} conta(s)</div></div></div>
       <div class="meter"><div class="t"><span>Pago</span><span>${P(tot ? tP / tot : 0)}</span></div><div class="bar"><span style="width:${tot ? (tP / tot) * 100 : 0}%;background:${css("--good")}"></span></div></div>
       <div class="tblwrap"><table class="tbl"><tr><th>Conta</th><th>Valor</th><th>Vence</th><th>Situação</th></tr>` +
-      pend.concat(pagas).map((c) => `<tr><td>${esc(c.nome)}</td><td>${R(c.pago && c.pago.valor ? c.pago.valor : c.valor)}</td><td>${venc(c)}</td><td>${c.pago ? `<span class="tag good">Pago${c.pago.data ? " " + c.pago.data.split("-").reverse().slice(0, 2).join("/") : ""}</span>` : `<span class="tag bad">Pendente</span>`}</td></tr>`).join("") +
-      `</table></div><p class="muted small">Marque o que pagou na aba Pagamentos da planilha (mês, nome da conta e valor). Valores pendentes são os previstos: condomínio e energia ainda estimados.</p>`;
+      pend.concat(pagas).map((c) => `<tr class="clic" data-conta="${esc(c.nome)}" data-tipo="${c.tipo}" title="Ver evolução mês a mês"><td>${esc(c.nome)} <span class="muted small">📈</span></td><td>${R(c.pago && c.pago.valor ? c.pago.valor : c.valor)}</td><td>${venc(c)}</td><td>${c.pago ? `<span class="tag good">Pago${c.pago.data ? " " + c.pago.data.split("-").reverse().slice(0, 2).join("/") : ""}</span>` : `<span class="tag bad">Pendente</span>`}</td></tr>`).join("") +
+      `</table></div><p class="muted small">Clique numa conta para ver a evolução mês a mês. Marque o que pagou na aba Pagamentos da planilha. Valores pendentes são os previstos.</p>`;
+    $(pre + "Body").querySelectorAll("tr.clic").forEach((tr) => tr.addEventListener("click", () => abrirConta(tr.dataset.conta, tr.dataset.tipo, k)));
+  }
+  // ---------- evolução de uma conta ----------
+  const baseConta = (n) => txt(n).replace(/\s*\((jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/\d{2}\)$/i, "").trim();
+  function serieConta(nome, tipo) {
+    const b = baseConta(nome), nb = norm(b);
+    return DATA.meses.filter((m) => m >= DATA.planIni).map((m) => {
+      let v = 0, real = false, est = false;
+      if (tipo === "Fatura") { const card = nome.replace(/^Fatura /, ""); v = (DATA.faturas[card] || [])[idx(m)] || 0; const f = DATA.fats.find((x) => x.card === card && x.mes === m); real = !!(f && f.status === "Fechada"); est = !real; }
+      else if (tipo === "Parcela") { const d = DATA.dividas.find((x) => x.desc === nome); if (d && ativo(d, m)) { v = d.valor; real = true; } }
+      else { const fs = DATA.fixos.filter((f) => norm(baseConta(f.desc)) === nb && ativo(f, m));
+        v = fs.reduce((s, f) => s + f.valor, 0); real = fs.some((f) => f.desc !== b); est = !real && /aluguel|condom|luz|energia/i.test(b); }
+      const pg = DATA.pagos.find((p) => p.mes === m && norm(baseConta(p.nome)) === nb);
+      if (pg && pg.valor) { v = pg.valor; real = true; est = false; }
+      const c = /luz|energia/i.test(b) ? (DATA.consumo || []).find((x) => x.mes === m && norm(baseConta(x.conta)) === nb) : null;
+      return { m, v, real, est, kwh: c && c.kwh ? c.kwh : null, ref: c ? c.ref : null };
+    }).filter((x) => x.v > 0.004);
+  }
+  function abrirConta(nome, tipo, k) {
+    fecharZoom();
+    const s = serieConta(nome, tipo), energia = /luz|energia/i.test(nome), cor = pal();
+    const ate = s.filter((x) => x.m <= addM(k, 3)); if (!ate.length) return;
+    const pct = (a, b) => (a && b ? (b - a) / a : null);
+    ate.forEach((x, n) => { const p = n ? ate[n - 1] : null; x.dv = p ? pct(p.v, x.v) : null; x.rk = x.kwh ? x.v / x.kwh : null;
+      const pk = p && p.kwh ? p : null; x.dk = pk && x.kwh ? pct(pk.kwh, x.kwh) : null; x.drk = pk && x.rk ? pct(pk.v / pk.kwh, x.rk) : null; });
+    const fP = (v) => (v == null ? "—" : (v > 0 ? "+" : "") + (v * 100).toFixed(1).replace(".", ",") + "%");
+    const cl = (v) => (v == null ? "" : v > 0.0005 ? "neg" : v < -0.0005 ? "pos" : "");
+    const reais = ate.filter((x) => x.real), ult = reais[reais.length - 1], pri = reais[0];
+    const ov = document.createElement("div"); ov.className = "zoomov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
+    const kpis = [["Último valor real", ult ? R(ult.v) : "—", ult ? lab(ult.m) : ""],
+      ["Variação no último mês", fP(ult ? ult.dv : null), "em relação ao mês anterior"],
+      ["Variação no período", pri && ult && pri !== ult ? fP(pct(pri.v, ult.v)) : "—", pri && ult ? lab(pri.m) + " → " + lab(ult.m) : ""],
+      ["Média dos meses reais", reais.length ? R(reais.reduce((t, x) => t + x.v, 0) / reais.length) : "—", reais.length + " mês(es)"]];
+    if (energia) { const ek = ate.filter((x) => x.kwh), ue = ek[ek.length - 1];
+      kpis.push(["Consumo (último)", ue ? ue.kwh + " kWh" : "—", ue ? "variação " + fP(ue.dk) : "mande o kWh das contas"], ["Preço por kWh", ue ? "R$ " + ue.rk.toFixed(3).replace(".", ",") : "—", ue ? "variação " + fP(ue.drk) : ""]); }
+    ov.innerHTML = `<div class="zh"><h3>${esc(baseConta(nome))} — evolução mês a mês</h3><button class="btn" type="button" id="zClose">Fechar ✕</button></div>
+      <div class="zb"><div class="kpis">${kpis.map(([l, v, sb]) => `<div class="kpi"><div class="l">${l}</div><div class="v ${/^[+-]/.test(v) ? cl(parseFloat(v.replace(",", ".").replace("%", ""))) : ""}">${v}</div><div class="s">${sb}</div></div>`).join("")}</div>
+      <div class="chart"><canvas id="ctaC1"></canvas></div>${energia ? `<h3 class="h3">Consumo (kWh) e preço por kWh</h3><div class="chart"><canvas id="ctaC2"></canvas></div>` : ""}
+      <div class="tblwrap"><table class="tbl"><tr><th>Mês</th><th>Valor</th><th>Variação</th><th>Tipo</th>${energia ? "<th>Referente a</th><th>kWh</th><th>Variação kWh</th><th>R$/kWh</th><th>Variação R$/kWh</th>" : ""}</tr>` +
+      ate.map((x) => `<tr class="${x.m === k ? "sel" : ""}"><td>${lab(x.m)}</td><td>${R(x.v)}${x.est ? "*" : ""}</td><td class="${cl(x.dv)}">${fP(x.dv)}</td><td>${x.real ? "real" : "previsto"}</td>${energia ? `<td>${x.ref ? lab(x.ref) : "—"}</td><td>${x.kwh || "—"}</td><td class="${cl(x.dk)}">${fP(x.dk)}</td><td>${x.rk ? "R$ " + x.rk.toFixed(3).replace(".", ",") : "—"}</td><td class="${cl(x.drk)}">${fP(x.drk)}</td>` : ""}</tr>`).join("") +
+      `</table></div><p class="muted small">Variação = comparação com o mês anterior (vermelho = subiu, verde = caiu). * = valor previsto/estimado.${energia ? " Para o consumo, me mande o kWh de cada conta (fica na aba Consumo da planilha)." : ""}</p></div>`;
+    document.body.appendChild(ov); document.body.style.overflow = "hidden"; $("zClose").addEventListener("click", fecharZoom);
+    const L = ate.map((x) => lab(x.m)), o1 = baseOpts(false, (v) => R0(v));
+    o1.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--ink2"), callback: (v) => v + "%" } };
+    draw("ctaC1", "bar", L, [ds("Valor", ate.map((x) => x.v), ate.map((x) => (x.real ? cor[0] : cor[0] + "66"))),
+      { type: "line", label: "Variação %", data: ate.map((x) => (x.dv == null ? null : Math.round(x.dv * 1000) / 10)), yAxisID: "y1", borderColor: cor[1], backgroundColor: cor[1], borderWidth: 2, pointRadius: 4, tension: 0.2, spanGaps: true,
+        datalabels: { align: "top", color: cor[1], formatter: (v) => (v == null ? "" : (v > 0 ? "+" : "") + String(v).replace(".", ",") + "%") } }], o1);
+    if (energia) { const ek = ate.filter((x) => x.kwh), o2 = baseOpts(false, (v) => v + " kWh");
+      o2.scales.y1 = { position: "right", grid: { drawOnChartArea: false }, ticks: { color: css("--ink2"), callback: (v) => "R$ " + Number(v).toFixed(2).replace(".", ",") } };
+      draw("ctaC2", "bar", ek.map((x) => lab(x.m)), [ds("Consumo (kWh)", ek.map((x) => x.kwh), cor[2]),
+        { type: "line", label: "R$ por kWh", data: ek.map((x) => Math.round(x.rk * 1000) / 1000), yAxisID: "y1", borderColor: cor[3], backgroundColor: cor[3], borderWidth: 2, pointRadius: 4,
+          datalabels: { align: "top", color: cor[3], formatter: (v) => "R$ " + Number(v).toFixed(3).replace(".", ",") } }], o2); }
   }
 
   // ---------- VR (Flash) ----------

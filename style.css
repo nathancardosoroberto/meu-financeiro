@@ -237,3 +237,7 @@ body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body
 .ext-doc .zoom{display:none}
 .ext-cap .ext-docs{width:max-content;min-width:100%}
 .ext-cap .ext-doc{width:max-content;min-width:900px}
+
+tr.clic{cursor:pointer} tr.clic:hover td{background:var(--barbg)}
+.zoomov .zb .chart{height:300px;margin-bottom:12px}
+.zoomov .tbl tr.sel td{background:var(--barbg);font-weight:600}
