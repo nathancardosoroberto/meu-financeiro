@@ -248,6 +248,7 @@
     if (F.item) t.push(F.item.slice(2)); if (F.unid === "pct") t.push("em %");
     $("fAtivos").textContent = t.join(" · ");
   }
+  $("extBtn").addEventListener("click", () => { EXT_OPEN = !EXT_OPEN; renderExtrato(F.mes); if (EXT_OPEN) $("extrato").scrollIntoView({ behavior: "smooth", block: "start" }); });
   $("recPessoa").addEventListener("change", (e) => { RECP = e.target.value; try { localStorage.setItem("rec-pessoa", RECP); } catch (_) {} renderDividas(); });
   $("cabeValor").addEventListener("input", () => renderCabe(F.mes));
   $("gastoManual").addEventListener("input", (e) => { const kk = addM(F.mes, -1); try { const v = e.target.value; v === "" ? localStorage.removeItem("gasto-" + kk) : localStorage.setItem("gasto-" + kk, v); } catch (_) {} renderGeral(true); });
@@ -601,7 +602,7 @@
       [ds("Ainda a pagar", dvc.map((d) => d.aPagar), dvc.map((d) => cor[Math.max(0, DATA.cartoes.indexOf(d.paga)) % 6]))], baseOpts(false, (v) => R0(v), { indexAxis: "y", animation: false }));
     ch.options.plugins.legend.display = false; ch.update();
     renderCompras(k, "tLanc", "lResumo");
-    renderContas(k); renderRecebidos(k); renderDevPessoa(k); renderLibera(k); renderPrevReal();
+    renderContas(k); renderRecebidos(k); renderDevPessoa(k); renderExtrato(k); renderLibera(k); renderPrevReal();
   }
 
   // ---------- contas do mês: pago x pendente ----------
@@ -773,6 +774,50 @@
     $("tDevPessoa").innerHTML = `<tr><th>Pessoa</th><th>Dívida</th><th>Parcela</th><th>Pagas</th><th>Pendentes</th><th>Total pago</th><th>Total pendente</th><th>Última parcela</th><th>Situação</th></tr>` +
       (rows.map((r) => `<tr class="${r.pend === 0 ? "fora" : ""}"><td>${esc(r.it.p)}</td><td style="text-align:left">${esc(r.it.desc)}</td><td>${R(r.it.v)}</td><td>${r.pagas} de ${r.it.N}</td><td>${r.pend}</td><td class="pos">${R(r.pago)}</td><td class="${r.pendV > 0.005 ? "neg" : ""}">${R(r.pendV)}</td><td>${r.falta}</td><td>${r.st}</td></tr>`).join("") || `<tr><td colspan="9" class="muted">Nenhuma dívida parcelada${RECP ? " de " + esc(RECP) : ""}.</td></tr>`) +
       (rows.length > 1 ? `<tr class="total"><td>Total</td><td></td><td></td><td></td><td></td><td>${R(rows.reduce((s, r) => s + r.pago, 0))}</td><td>${R(rows.reduce((s, r) => s + r.pendV, 0))}</td><td></td><td></td></tr>` : "");
+  }
+  // extrato para enviar à pessoa (mês a mês)
+  let EXT_OPEN = false;
+  function renderExtrato(k) {
+    const box = $("extrato"); $("extBtn").textContent = EXT_OPEN ? "Fechar extrato" : "📄 Extrato para enviar";
+    if (!EXT_OPEN) { box.hidden = true; box.innerHTML = ""; return; } box.hidden = false;
+    const ms = DATA.meses.filter((m) => m >= k);
+    const porMes = ms.map((m) => { const rc = receber(m); statusReceber(m, rc); return { m, rc }; });
+    const pessoas = RECP ? [RECP] : [...new Set(porMes.flatMap((x) => x.rc.map((r) => r.pessoa)))].sort();
+    const hoje = new Date();
+    box.innerHTML = pessoas.map((p) => {
+      const linhas = porMes.map((x) => ({ m: x.m, it: x.rc.filter((r) => r.pessoa === p) })).filter((x) => x.it.length);
+      // itens com fim x recorrentes
+      const itens = {}; linhas.forEach((x) => x.it.forEach((r) => { const o = itens[r.base] || (itens[r.base] = { base: r.base, ini: x.m, fim: x.m, valores: [], n: 0, pend: 0, origem: r.origem });
+        o.fim = x.m; if (r.valor - (r.pago || 0) > 0.015) o.n++; o.valores.push(r.valor); o.pend += r.valor - (r.pago || 0); }));
+      const fixo = (b) => DATA.fixos.some((f) => f.desc === b && !f.fim);
+      const ultimo = linhas.length ? linhas[linhas.length - 1].m : k;
+      const finitos = Object.values(itens).filter((o) => !fixo(o.base)), recorr = Object.values(itens).filter((o) => fixo(o.base));
+      const totFin = finitos.reduce((s, o) => s + o.pend, 0);
+      const ultFin = finitos.reduce((a2, o) => (o.fim > a2 ? o.fim : a2), addM(k, 2));
+      const mesesTab = linhas.filter((x) => x.m <= ultFin);
+      const curto = (b) => b.replace(/\s*—.*$/, "").replace(/\s*\((anual|ingressos)[^)]*\)/gi, "").replace(/\s*\(\w{3}\/\d{2}\)$/, "").trim();
+      const cols = [...new Set(mesesTab.flatMap((x) => x.it.map((r) => r.base)))].sort((a2, b2) => fixo(a2) - fixo(b2));
+      const nomeCol = {}; cols.forEach((c) => (nomeCol[c] = curto(c)));
+      const uniq = [...new Set(cols.map((c) => nomeCol[c]))];
+      return `<div class="ext-doc">
+        <div class="ext-h"><div><h3>Valores a receber — ${esc(p)}</h3><div class="muted small">De ${lab(k)} até ${lab(ultFin)} · gerado em ${fmtD(hoje)}</div></div>
+          <div class="ext-tot"><div class="l">Parcelas com fim: total que falta</div><div class="v">${R(totFin)}</div></div></div>
+        <div class="tblwrap"><table class="tbl ext-t"><tr><th>Mês</th>${uniq.map((u) => `<th>${esc(u)}</th>`).join("")}<th>Total do mês</th><th>Situação</th></tr>` +
+        mesesTab.map((x) => { const tm = x.it.reduce((s, r) => s + r.valor, 0), pg = x.it.reduce((s, r) => s + (r.pago || 0), 0);
+          const cel = (u) => { const rs = x.it.filter((r) => nomeCol[r.base] === u); if (!rs.length) return "—"; const v = rs.reduce((s, r) => s + r.valor, 0), par = rs.map((r) => (r.item.match(/\((\d+\/\d+)\)/) || [])[1]).filter(Boolean)[0];
+            return R(v) + (par ? `<div class="muted small">${par}</div>` : ""); };
+          const st = pg >= tm - 0.015 ? '<span class="tag good">Pago</span>' : pg > 0.004 ? `<span class="tag">Falta ${R(tm - pg)}</span>` : x.m < mesAtual() ? '<span class="tag bad">Atrasado</span>' : "a pagar";
+          return `<tr><td><b>${lab(x.m)}</b></td>${uniq.map((u) => `<td>${cel(u)}</td>`).join("")}<td><b>${R(tm)}</b></td><td>${st}</td></tr>`; }).join("") +
+        `</table></div>
+        <h4>Resumo por item</h4>
+        <table class="tbl ext-t"><tr><th>Item</th><th>Valor por mês</th><th>Até</th><th>Meses restantes</th><th>Total restante</th></tr>` +
+        finitos.filter((o) => o.pend > 0.5).map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[0])}</td><td><b>${lab(o.fim)}</b> (última)</td><td>${o.n}</td><td><b>${R(o.pend)}</b></td></tr>`).join("") +
+        recorr.map((o) => `<tr><td style="text-align:left">${esc(curto(o.base))}</td><td>${R(o.valores[0])}</td><td>todo mês (sem fim)</td><td>—</td><td>${R(o.valores[0])}/mês</td></tr>`).join("") +
+        `</table>
+        ${recorr.length ? `<p class="muted small">Contas da casa (aluguel, condomínio, luz, internet) usam o valor previsto até a conta do mês chegar; o valor real pode variar. Elas continuam todo mês depois de ${lab(ultFin)}.</p>` : ""}
+      </div>`;
+    }).join("") + `<div class="ext-act"><button type="button" class="btn ghost sm" id="extPrint">Imprimir / salvar PDF</button></div>`;
+    $("extPrint").addEventListener("click", () => { document.body.classList.add("print-ext"); window.print(); setTimeout(() => document.body.classList.remove("print-ext"), 500); });
   }
   function renderRecebidos(k) {
     const { mes, atras } = pendencias(k);

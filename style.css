@@ -211,3 +211,14 @@ body.travado>header,body.travado>nav,body.travado>section,body.travado>main,body
 #tRend tr.sel td{background:var(--barbg);font-weight:600}
 
 .cabe-in select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit}
+
+.extrato{margin:12px 0 18px}
+.ext-doc{border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px;background:var(--surface)}
+.ext-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+.ext-h h3{margin:0 0 2px;font-size:18px}
+.ext-tot{text-align:right}.ext-tot .l{font-size:12px;color:var(--muted)}.ext-tot .v{font-size:24px;font-weight:750}
+.ext-doc h4{margin:16px 0 6px;font-size:14px}
+.ext-t tr.ext-mes td{border-top:2px solid var(--line)}
+.ext-t tr.ext-sub td{font-size:13px;color:var(--ink2);background:var(--barbg)}
+.ext-act{display:flex;justify-content:flex-end}
+@media print{body.print-ext *{visibility:hidden} body.print-ext #extrato, body.print-ext #extrato *{visibility:visible} body.print-ext #extrato{position:absolute;left:0;top:0;width:100%} body.print-ext .ext-act{display:none}}
