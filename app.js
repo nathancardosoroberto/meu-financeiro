@@ -780,8 +780,15 @@
   // dinheiro para débito/Pix considerando a data de hoje (salário, 13º e extras só depois que caem)
   function dinheiroAgora() {
     const cal = mesAtual(), dm = debitoMes(cal), prev = debitoMes(addM(cal, -1));
-    if (dm.salCaiu) return { agora: dm.livre, dm, futuro: null, cal };
-    return { agora: prev.livre, dm, futuro: { valor: dm.livre, data: dm.salData, mes: cal }, cal };
+    const r = dm.salCaiu ? { agora: dm.livre, dm, futuro: null, cal } : { agora: prev.livre, dm, futuro: { valor: dm.livre, data: dm.salData, mes: cal }, cal };
+    // o que posso gastar é só o dinheiro que está na conta (Plano de Gastos B16), sem o CDB (reserva de emergência),
+    // menos as contas do mês que ainda faltam pagar (valor real ou previsto)
+    if (DATA.saldo > 0.005) {
+      const itens = contasMes(cal).filter((c) => !c.pago), pend = itens.reduce((s, c) => s + c.valor, 0);
+      r.conta = { saldo: DATA.saldo, pend, itens, livre: Math.max(0, DATA.saldo - pend), plano: r.agora };
+      r.agora = Math.min(r.agora, r.conta.livre);
+    }
+    return r;
   }
   function catsMes(k) {
     const ci = DATA.cat.meses.indexOf(k);
@@ -833,10 +840,10 @@
           <ul class="blk-l"><li><span>Devem no mês</span><b>${R(recTot)}</b></li><li><span>Já recebi</span><b class="pos">${R(recPago)}</b></li><li><span>Falta receber</span><b class="${recPend > 0.005 ? "neg" : ""}">${R(recPend)}</b></li></ul>
           <div class="pbar alt"><span style="width:${recTot ? (recPago / recTot) * 100 : 0}%"></span></div><div class="blk-n">${Object.entries(devidoPessoa(k)).map(([p, v]) => esc(p) + " " + R0(v)).join(" · ") || "ninguém deve neste mês"}</div></div>
         <div class="blk blk-gasto"><div class="blk-t">💵 Posso gastar agora</div><div class="blk-v ${da.agora <= 0.005 ? "neg" : ""}">${R(da.agora)}</div>
-          <ul class="blk-l">${da.futuro ? `<li><span>⏳ ${fmtD(da.futuro.data)} (${DIAS[da.futuro.data.getDay()]})</span><b>+ ${R(da.futuro.valor)}</b></li>` : ""}
+          <ul class="blk-l">${da.conta ? `<li><span>🏦 Na conta</span><b>${R(da.conta.saldo)}</b></li><li><span>− Falta pagar${da.conta.itens.length ? " (" + da.conta.itens.map((c) => esc(c.nome)).join(", ") + ")" : ""}</span><b class="${da.conta.pend > 0.005 ? "neg" : ""}">${R(da.conta.pend)}</b></li>${da.conta.plano - da.conta.livre > 0.005 ? `<li><span>📊 Limite do plano</span><b>${R(da.conta.plano)}</b></li>` : ""}` : ""}${da.futuro ? `<li><span>⏳ ${fmtD(da.futuro.data)} (${DIAS[da.futuro.data.getDay()]})</span><b>+ ${R(da.futuro.valor)}</b></li>` : ""}
             ${da.dm.ex.valor && !da.dm.ex.caiu ? `<li><span>⏳ 13º livre em ${da.dm.ex.data ? fmtD(da.dm.ex.data) : "breve"}</span><b>+ ${R(da.dm.ex.valor)}</b></li>` : ""}
             <li><span>💳 Cartão (só parcelado)</span><b>${R(cartao)}</b></li></ul>
-          <div class="blk-n">no débito/Pix · conta só o que já caiu na conta${sdl && Math.abs(sdl.d) > 0.005 ? ` · <span class="sim-t">🧪 com simulação: ${R(Math.max(0, (da.futuro ? da.futuro.valor : da.agora) + sdl.d))}</span>` : ""}</div></div>
+          ${da.conta && DATA.reservaInformada > 0.005 ? `<div class="blk-n">🛟 Reserva de emergência: ${R(DATA.reservaInformada)} (CDB), fora desta conta. Só para emergência.</div>` : ""}<div class="blk-n">no débito/Pix · conta só o que já caiu na conta${sdl && Math.abs(sdl.d) > 0.005 ? ` · <span class="sim-t">🧪 com simulação: ${R(Math.max(0, (da.futuro ? da.futuro.valor : da.agora) + sdl.d))}</span>` : ""}</div></div>
       </div>
       <div class="sit-cmp"><div class="cmp-r"><span>Entradas</span><div class="cmp-b"><span style="width:${(entradas / maxT) * 100}%"></span></div><b>${R0(entradas)}</b></div>
         <div class="cmp-r out"><span>Contas</span><div class="cmp-b"><span style="width:${(saidas / maxT) * 100}%"></span></div><b>${R0(saidas)}</b></div></div>
@@ -849,7 +856,7 @@
     const as = DATA.mc.ass, assTot = as.filter((a) => !assOff(a.nome)).reduce((s, a) => s + a.valor, 0);
     const cem = checaCemig(), alE = cem ? cem.al.filter((x) => x.nv !== "info") : [];
     const tiles = [
-      ["💵", "Posso gastar agora", R(da.agora), da.futuro ? "+ " + R0(da.futuro.valor) + " em " + fmtD(da.futuro.data) : "débito/Pix", "metas|heroCard", da.agora <= 0.005 ? "neg" : "pos"],
+      ["💵", "Posso gastar agora", R(da.agora), da.futuro ? "+ " + R0(da.futuro.valor) + " em " + fmtD(da.futuro.data) : da.conta ? "livre na conta, sem a reserva" : "débito/Pix", "metas|heroCard", da.agora <= 0.005 ? "neg" : "pos"],
       ["🧾", "Falta pagar em " + lab(k), R(tPend), pend.length + " conta(s) pendente(s)", "dividas|cardContas", tPend > 0.005 ? "neg" : "pos"],
       ["💰", "Rendimentos de " + lab(k), R(r.dinheiro), "salário + extras (líquido)", "rend|rendCard", ""],
       ["🤝", "Falta receber", R(recPend), "de " + R0(recTot) + " devidos no mês", "rend|cardReceber", recPend > 0.005 ? "warn" : "pos"],
