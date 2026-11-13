@@ -953,6 +953,14 @@
       [metaRes > 0.005 ? "ok" : "warn", "🛡️", metaRes > 0.005 ? `Dá para mandar ${R0(metaRes)} para a reserva` : "Sem sobra para a reserva neste mês", `sobra ${R0(f.fim)} − ${R0(livre)} livres para gastar · sem gastar nada, até ${R0(Math.max(0, f.fim))}`],
       [acabam.length ? "ok" : "info", "🏁", acabam.length ? `${acabam.length} parcelamento${acabam.length > 1 ? "s acabam" : " acaba"} este mês` : "Nenhum parcelamento acaba este mês", acabam.length ? `libera ${R0(libera)}/mês a partir de ${lab(addM(k, 1))}: ${acabam.slice(0, 3).map((x) => esc(x.n)).join(", ")}${acabam.length > 3 ? " +" + (acabam.length - 3) : ""}` : (() => { const prox = DATA.meses.find((m) => m > k && DATA.dividas.some((d) => d.fim === m && d.custo > 0)); return prox ? "próximo término em " + lab(prox) : ""; })()],
     ];
+    // novos parcelamentos feitos neste mês (compras parceladas com data no mês) x os que acabam: saldo mensal a partir do mês seguinte
+    const novos = DATA.lanc.filter((l) => l.parcelado && l.n > 1 && l.data && l.data.slice(0, 7) === k && l.custo > 0.005).map((l) => ({ n: l.desc, v: l.custo }));
+    const entram = novos.reduce((s, x) => s + x.v, 0), saldoP = libera - entram;
+    if (novos.length) {
+      const nomes = (a) => a.slice(0, 2).map((x) => esc(x.n)).join(", ") + (a.length > 2 ? " +" + (a.length - 2) : "");
+      it[2] = [saldoP >= 0 ? "ok" : "warn", "🏁", `${acabam.length} parcelamento${acabam.length === 1 ? "" : "s"} acaba${acabam.length === 1 ? "" : "m"} · ${novos.length} novo${novos.length > 1 ? "s" : ""} este mês`,
+        `libera ${R0(libera)}/mês, entram ${R0(entram)}/mês: ${saldoP >= 0 ? "sobram " + R0(saldoP) : "comprometem mais " + R0(-saldoP)}/mês a partir de ${lab(addM(k, 1))}${acabam.length ? ". Acabam: " + nomes(acabam) : ""}. Novos: ${nomes(novos)}`];
+    }
     return `<div class="checks">${it.map(([c, ic, t, s]) => `<div class="ck ${c}"><span class="ic">${ic}</span><div><b>${t}</b><small>${s}</small></div></div>`).join("")}</div>`;
   }
   function marcosSaldo(k) { // sobra acumulada no fim dos dias 5, 10, 15, 20 e fim do mês, com as contas pagas em dia
