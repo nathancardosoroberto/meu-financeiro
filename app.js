@@ -784,7 +784,7 @@
     // o que posso gastar é só o dinheiro que está na conta (Plano de Gastos B16), sem o CDB (reserva de emergência),
     // menos as contas do mês que ainda faltam pagar (valor real ou previsto)
     if (DATA.saldo > 0.005) {
-      const itens = contasMes(cal).filter((c) => !c.pago), pend = itens.reduce((s, c) => s + c.valor, 0);
+      const itens = contasMes(cal).filter((c) => !c.pago && !/picpay/i.test(c.nome)), pend = itens.reduce((s, c) => s + c.valor, 0); // fatura PicPay é do Daniel (ele paga e reembolsa): não sai do meu saldo
       r.conta = { saldo: DATA.saldo, pend, itens, livre: Math.max(0, DATA.saldo - pend), plano: r.agora };
       r.agora = Math.min(r.agora, r.conta.livre);
     }
