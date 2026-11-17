@@ -35,6 +35,7 @@
 
 <div class="stick" id="stick"><nav class="tabs" role="tablist">
   <button role="tab" data-tab="geral" class="on"><span>📊</span> Visão geral</button>
+  <button role="tab" data-tab="minha"><span>💼</span> Minha parte</button>
   <button role="tab" data-tab="dividas"><span>🧾</span> Contas e dívidas</button>
   <button role="tab" data-tab="rend"><span>💰</span> Rendimentos</button>
   <button role="tab" data-tab="metas"><span>🎯</span> Metas e cortes</button>
@@ -83,6 +84,9 @@
   </div>
 
   <!-- ============ CONTAS E DÍVIDAS (tudo que preciso pagar) ============ -->
+  <div class="tab" id="tab-minha" hidden>
+    <div class="card"><h2>💼 Minha parte · <span class="mesSel"></span></h2><p class="muted small">Só o que é meu (aluguel, condomínio, luz e o resto, sem a parte do Samuel e do Daniel) comparado com os meus rendimentos.</p><div id="minhaBody"></div></div>
+  </div>
   <div class="tab" id="tab-dividas" hidden>
     <section class="card" id="cardContas">
       <div class="row-between"><h2>Contas do mês: pago x pendente</h2><p class="muted small" id="cResumo"></p></div>

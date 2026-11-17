@@ -207,7 +207,7 @@
   let TAB = "geral";
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
     TAB = b.dataset.tab; document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-    ["geral", "dividas", "rend", "metas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
+    ["geral", "minha", "dividas", "rend", "metas", "sim"].forEach((t) => ($("tab-" + t).hidden = t !== TAB));
     try { localStorage.setItem("dash-aba", TAB); } catch (_) {} window.scrollTo({ top: 0 });
     $("filtros").style.display = TAB === "sim" ? "none" : ""; renderAll();
   }));
@@ -309,6 +309,46 @@
     Object.values(pp).forEach((o) => out.push(o));
     return out;
   }
+  // ---------- aba "Minha parte": só o que é meu (sem Samuel e Daniel) x meus rendimentos ----------
+  function renderMinha(k) {
+    const el = $("minhaBody"); if (!el) return; const i = idx(k);
+    if (i < 0) { el.innerHTML = `<p class="muted">Sem dados para ${lab(k)}.</p>`; return; }
+    const pj = DATA.proj, ab = Math.abs, soma = (a, f) => a.reduce((t, x) => t + f(x), 0);
+    const reemb = pj.reemb[i] || 0, meusRend = (pj.entradas[i] || 0) - reemb;
+    const fxs = DATA.fixos.filter((f) => ativo(f, k) && f.paga !== "VR" && f.valor > 0), dvs = DATA.dividas.filter((d) => ativo(d, k) && d.valor > 0);
+    const rF = soma(fxs, (f) => (f.r1 || 0) + (f.r2 || 0)), rP = soma(dvs, (d) => (d.r1 || 0) + (d.r2 || 0));
+    const minha = ab(pj.fixos[i] || 0) + ab(pj.parcelas[i] || 0) + ab(pj.variaveis[i] || 0) - reemb;
+    const mF = ab(pj.fixos[i] || 0) - rF, mP = ab(pj.parcelas[i] || 0) - rP, mV = minha - mF - mP;
+    const sobra = meusRend - minha, ok = sobra >= -0.005, pct = meusRend > 0 ? minha / meusRend : 0;
+    const rc = receber(k), terc = {}; rc.forEach((r) => (terc[r.pessoa] = (terc[r.pessoa] || 0) + r.valor));
+    const pic = soma(rc.filter((r) => r.semCaixa), (r) => r.valor);
+    const cs = contasMes(k), pagoDe = (f) => cs.find((c) => c.pago && norm(c.nome) === norm(f.desc));
+    const noCartao = (f) => DATA.cartoes.includes(f.paga);
+    const rendDet = [["Salário + extras", pj.renda[i]], ["13º", pj.d13[i]], ["Férias", pj.ferias[i]], ["Ajuste", pj.ajuste[i]]].filter(([, v]) => ab(v || 0) > 0.005).map(([n, v]) => n + " " + R(v)).join(" · ");
+    const resto = (o) => [o.r1 ? esc(o.q1) + " " + R(o.r1) : "", o.r2 ? esc(o.q2) + " " + R(o.r2) : ""].filter(Boolean).join(" + ") || "—";
+    fxs.sort((a, b) => b.custo - a.custo);
+    const linhasF = fxs.map((f) => { const pg = pagoDe(f), sit = noCartao(f) ? `<span class="tag">no cartão ${esc(f.paga)}</span>` : pg ? `<span class="tag good">Pago</span>` : `<span class="tag bad">Pendente</span>`;
+      return `<tr><td>${esc(f.desc)}</td><td>${R(f.valor)}</td><td><b>${R(f.custo)}</b></td><td>${resto(f)}</td><td>${sit}</td></tr>`; }).join("");
+    const porCartao = {}; dvs.forEach((d) => { const o = porCartao[d.paga] || (porCartao[d.paga] = { n: 0, v: 0, c: 0 }); o.n++; o.v += d.valor; o.c += d.custo; });
+    const linhasP = Object.entries(porCartao).sort((a, b) => b[1].c - a[1].c).map(([c, o]) => `<tr><td>Parcelamentos ${esc(c)} (${o.n})</td><td>${R(o.v)}</td><td><b>${R(o.c)}</b></td><td>${o.v - o.c > 0.005 ? R(o.v - o.c) + " de terceiros" : "—"}</td></tr>`).join("");
+    el.innerHTML = `
+      <div class="mp-banner ${ok ? "ok" : "warn"}"><b>${ok ? "✅ Dá para pagar a minha parte" : "⚠️ A minha parte não cabe nos meus rendimentos"}</b><br>
+        <span class="muted small">${lab(k)} (${esc((DATA.tipo[i] || "").toLowerCase())}) · ${ok ? "sobram" : "faltam"} <b>${R(Math.abs(sobra))}</b> · minha parte usa ${P(pct)} dos meus rendimentos</span></div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Meus rendimentos</div><div class="v pos">${R(meusRend)}</div><div class="s">${rendDet || "—"}</div></div>
+        <div class="kpi"><div class="l">Minha parte a pagar</div><div class="v">${R(minha)}</div><div class="s">contas ${R(mF)} · parcelas ${R(mP)} · compras/faturas ${R(mV)}</div></div>
+        <div class="kpi"><div class="l">${ok ? "Sobra" : "Falta"}</div><div class="v ${ok ? "pos" : "neg"}">${R(Math.abs(sobra))}</div><div class="s">rendimentos − minha parte</div></div></div>
+      <div class="meter"><div class="t"><span>Minha parte sobre os meus rendimentos</span><span>${P(pct)}</span></div><div class="bar"><span style="width:${Math.min(100, pct * 100)}%;background:${ok ? css("--good") : css("--bad")}"></span></div></div>
+      <p class="muted small">Fora desta conta: ${Object.entries(terc).map(([p2, v]) => esc(p2) + " " + R(v)).join(" · ") || "nada de terceiros"}${pic > 0.005 ? " (inclui a Fatura PicPay do Daniel, " + R(pic) + ")" : ""}. O VR (Flash, ${R(pj.vr[i] || 0)}) é só para mercado e também fica de fora.</p>
+      <h3 style="margin:14px 0 6px">Contas fixas: só a minha parte</h3>
+      <div class="tblwrap"><table class="tbl"><tr><th>Conta</th><th>Valor cheio</th><th>Minha parte</th><th>Quem paga o resto</th><th>Situação</th></tr>${linhasF}
+        <tr class="total"><td>Total das contas</td><td>${R(soma(fxs, (f) => f.valor))}</td><td>${R(soma(fxs, (f) => f.custo))}</td><td>${rF > 0.005 ? R(rF) + " de terceiros" : "—"}</td><td></td></tr></table></div>
+      <h3 style="margin:14px 0 6px">Parcelamentos: só a minha parte</h3>
+      <div class="tblwrap"><table class="tbl"><tr><th>Cartão</th><th>Valor cheio</th><th>Minha parte</th><th>Terceiros</th></tr>${linhasP || `<tr><td colspan="4" class="muted">Sem parcelamentos ativos.</td></tr>`}
+        <tr class="total"><td>Total das parcelas</td><td>${R(soma(dvs, (d) => d.valor))}</td><td>${R(mP)}</td><td>${rP > 0.005 ? R(rP) : "—"}</td></tr></table></div>
+      <p class="muted small">Compras do mês e demais cobranças das faturas (minha parte): <b>${R(mV)}</b>. Conta fechada: rendimentos ${R(meusRend)} − minha parte ${R(minha)} = ${ok ? "sobra " : "falta "}${R(Math.abs(sobra))}.</p>`;
+    if (typeof rotulaTabelas === "function") setTimeout(rotulaTabelas, 0);
+  }
   function abrirPicPay(k) {
     const rc = receber(k).filter((r) => r.det); statusReceber(k, rc); let el = document.getElementById("ppov");
     if (!el) { el = document.createElement("div"); el.id = "ppov"; el.className = "pp-ov"; el.addEventListener("click", (e) => { if (e.target === el || e.target.closest("[data-ppx]")) el.hidden = true; }); document.body.appendChild(el); }
@@ -387,7 +427,7 @@
   // ---------- render ----------
   function renderAll() { if (!DATA) return; resumoFiltros(); renderTopo(); document.querySelectorAll(".mesSel").forEach((e) => (e.textContent = lab(F.mes)));
     if (!SIM) SIM = simLoad();
-    if (TAB === "sim") renderSim(); else if (TAB === "geral") renderResumo(F.mes); else { renderGeral(); renderDividas(); renderMetas(); }
+    if (TAB === "sim") renderSim(); else if (TAB === "geral") renderResumo(F.mes); else if (TAB === "minha") renderMinha(F.mes); else { renderGeral(); renderDividas(); renderMetas(); }
     renderSimBanner(); setTimeout(() => { exportaTudo(); rotulaTabelas(); }, 0); }
 
   function renderTopo() {
