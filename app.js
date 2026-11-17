@@ -163,6 +163,8 @@
     D.recebido = {};
     if (wb.Sheets["Reembolsos"]) { const re = rows(wb, "Reembolsos"); const ri = findRow(re, (t) => t.startsWith("RECEBIDO"));
       if (ri >= 0) { const ms = re[ri].slice(1).map(ym); for (let r = ri + 1; r < ri + 6; r++) { const p = txt(re[r] && re[r][0]); if (!p || p === "-") continue; D.recebido[p] = {}; ms.forEach((m, n) => { if (m && num(re[r][n + 1])) D.recebido[p][m] = num(re[r][n + 1]); }); } } }
+    // fatura PicPay: é do Daniel (eu não pago nada), fica só no "a receber"
+    D.fats = D.fats.filter((f) => f.card !== "PicPay"); delete D.faturas["PicPay"];
     return D;
   }
 
@@ -296,14 +298,27 @@
   }
   function diaVenc(k, dia) { if (!dia) return null; const [y, m] = k.split("-").map(Number); const ult = new Date(y, m, 0).getDate(); return new Date(y, m - 1, Math.min(dia, ult), 12); }
   function receber(k) {
-    const out = [];
-    const push = (pessoa, valor, item, origem, quando, base) => { if (pessoa && pessoa !== "-" && valor > 0.004) out.push({ pessoa, valor, item, origem, quando, base: base || item }); };
-    DATA.fixos.filter((f) => ativo(f, k)).forEach((f) => { const q = diaVenc(k, f.dia); push(f.q1, f.r1, f.desc, "Conta fixa", q); push(f.q2, f.r2, f.desc, "Conta fixa", q); });
+    const out = [], pp = {};
+    const push = (pessoa, valor, item, origem, quando, base, paga) => { if (!(pessoa && pessoa !== "-" && valor > 0.004)) return;
+      if (paga === "PicPay") { const o = pp[pessoa] || (pp[pessoa] = { pessoa, valor: 0, item: "Fatura PicPay", origem: "Cartão PicPay", quando, base: "Fatura PicPay", semCaixa: true, det: [] }); o.valor += valor; o.det.push({ n: item, v: valor }); return; }
+      out.push({ pessoa, valor, item, origem, quando, base: base || item }); };
+    DATA.fixos.filter((f) => ativo(f, k)).forEach((f) => { const q = diaVenc(k, f.dia); push(f.q1, f.r1, f.desc, "Conta fixa", q, null, f.paga); push(f.q2, f.r2, f.desc, "Conta fixa", q, null, f.paga); });
     DATA.dividas.filter((d) => ativo(d, k)).forEach((d) => { const q = diaVenc(k, DATA.venc[d.paga]); const inf = dividaInfo(d, k);
-      const t = d.desc + (inf.atual ? " (" + inf.atual + ")" : ""); push(d.q1, d.r1, t, "Parcela " + d.paga, q, d.desc); push(d.q2, d.r2, t, "Parcela " + d.paga, q, d.desc); });
-    DATA.lanc.filter((l) => l.ini && l.ini <= k && l.fim >= k).forEach((l) => { const q = diaVenc(k, DATA.venc[l.paga]); push(l.q1, l.r1, l.desc, "Lançamento", q); push(l.q2, l.r2, l.desc, "Lançamento", q); });
+      const t = d.desc + (inf.atual ? " (" + inf.atual + ")" : ""); push(d.q1, d.r1, t, "Parcela " + d.paga, q, d.desc, d.paga); push(d.q2, d.r2, t, "Parcela " + d.paga, q, d.desc, d.paga); });
+    DATA.lanc.filter((l) => l.ini && l.ini <= k && l.fim >= k).forEach((l) => { const q = diaVenc(k, DATA.venc[l.paga]); push(l.q1, l.r1, l.desc, "Lançamento", q, null, l.paga); push(l.q2, l.r2, l.desc, "Lançamento", q, null, l.paga); });
+    Object.values(pp).forEach((o) => out.push(o));
     return out;
   }
+  function abrirPicPay(k) {
+    const rc = receber(k).filter((r) => r.det); statusReceber(k, rc); let el = document.getElementById("ppov");
+    if (!el) { el = document.createElement("div"); el.id = "ppov"; el.className = "pp-ov"; el.addEventListener("click", (e) => { if (e.target === el || e.target.closest("[data-ppx]")) el.hidden = true; }); document.body.appendChild(el); }
+    el.innerHTML = `<div class="pp-box"><button type="button" class="pp-x" data-ppx aria-label="Fechar">✕</button><h3>💳 Fatura PicPay · ${lab(k)}</h3>` +
+      (rc.length ? rc.map((r) => `<p class="muted small">${esc(r.pessoa)} · vence ${r.quando ? fmtD(r.quando) : "—"} · ${r.st === "pago" ? "paga" : r.st === "parcial" ? "paga em parte" : "pendente"}</p><table class="tbl"><tr><th>Cobrança no cartão</th><th>Valor</th></tr>` +
+        r.det.map((x) => `<tr><td>${esc(x.n)}</td><td>${R(x.v)}</td></tr>`).join("") + `<tr class="total"><td>Total da fatura</td><td>${R(r.valor)}</td></tr></table>`).join("") : `<p class="muted">Sem cobranças do PicPay neste mês.</p>`) +
+      `<p class="muted small">Cartão do Daniel: você não paga nada, só acompanha o que ele tem que pagar.</p></div>`;
+    el.hidden = false;
+  }
+  document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("[data-pp]"); if (a) { e.preventDefault(); abrirPicPay(a.dataset.pp); } });
   function serieItem(key) {
     const [tp, desc] = [key.slice(0, 1), key.slice(2)];
     const rg = DATA.meses;
@@ -600,7 +615,7 @@
     const tot = {}; rc.forEach((r) => { const o = tot[r.pessoa] || (tot[r.pessoa] = { v: 0, p: 0 }); o.v += r.valor; o.p += r.pago; });
     $("rResumo").textContent = Object.entries(tot).map(([p, o]) => `${p}: recebido ${R(o.p)} · falta ${R(Math.max(0, o.v - o.p))}`).join("  |  ") || "nada a receber";
     $("tReceber").innerHTML = `<tr><th>Item</th><th>Pessoa</th><th>Origem</th><th>Valor</th><th>Receber até</th><th>Situação</th></tr>` +
-      rc.map((r) => `<tr class="${r.st === "pago" ? "fora" : ""}"><td>${esc(r.item)}</td><td>${esc(r.pessoa)}</td><td>${esc(r.origem)}</td><td>${R(r.valor)}</td><td>${r.quando ? fmtD(r.quando) : "—"}</td><td>${tag(r)}</td></tr>`).join("") +
+      rc.map((r) => `<tr class="${r.st === "pago" ? "fora" : ""}"><td>${r.det ? `<a class="pp-link" data-pp="${k}">${esc(r.item)} ▾</a>` : esc(r.item)}</td><td>${esc(r.pessoa)}</td><td>${esc(r.origem)}</td><td>${R(r.valor)}</td><td>${r.quando ? fmtD(r.quando) : "—"}</td><td>${tag(r)}</td></tr>`).join("") +
       Object.entries(tot).map(([p, o]) => `<tr class="total"><td>Total ${esc(p)}</td><td></td><td></td><td>${R(o.v)}</td><td></td><td>${o.p >= o.v - 0.015 ? '<span class="tag good">Tudo pago</span>' : '<span class="tag bad">Falta ' + R(o.v - o.p) + "</span>"}</td></tr>`).join("") +
       (sobras.length ? `<tr><td colspan="6" class="muted small" style="text-align:left">Recebido sem item correspondente: ${sobras.map((s) => esc(s.pessoa) + " " + R(s.resto) + " (" + esc(s.item) + ")").join(", ")}</td></tr>` : "");
     // fixos
@@ -813,7 +828,7 @@
     const pagas = cs.filter((c) => c.pago), pend = cs.filter((c) => !c.pago);
     const tPago = pagas.reduce((s, c) => s + (c.pago.valor || c.valor), 0), tPend = pend.reduce((s, c) => s + c.valor, 0);
     const rc = receber(k); statusReceber(k, rc);
-    const recTot = rc.reduce((s, x) => s + x.valor, 0), recPago = rc.reduce((s, x) => s + Math.min(x.valor, x.pago || 0), 0), recPend = Math.max(0, recTot - recPago);
+    const rcCx = rc.filter((x) => !x.semCaixa), ppL = rc.filter((x) => x.semCaixa), ppV = ppL.reduce((s, x) => s + x.valor, 0), ppPago = ppL.reduce((s, x) => s + Math.min(x.valor, x.pago || 0), 0), recTot = rcCx.reduce((s, x) => s + x.valor, 0), recPago = rcCx.reduce((s, x) => s + Math.min(x.valor, x.pago || 0), 0), recPend = Math.max(0, recTot - recPago);
     const outros = r.dinheiro - r.sal, entradas = r.dinheiro + recTot, saidas = tPago + tPend, sobra = entradas - saidas;
     const ev = eventosMes(k), vencidas = pend.filter((c) => { const d = diaVenc(k, c.dia); return d && d < h; });
     const ok = sobra >= -0.005, pc = DATA.plano[k] || {}, cartao = Math.max(0, (pc.teto || 0) - gastoInter(k).v);
@@ -837,7 +852,7 @@
           <div class="pbar"><span style="width:${saidas ? (tPago / saidas) * 100 : 0}%"></span></div>
           <div class="blk-n ${vencidas.length ? "neg" : ""}">${vencidas.length ? "⚠️ " + vencidas.length + " vencida(s): " + vencidas.map((c) => esc(c.nome)).join(", ") : "nenhuma conta vencida"}</div></div>
         <div class="blk blk-rec"><div class="blk-t">🤝 Terceiros</div><div class="blk-v">${R(recPend)}</div>
-          <ul class="blk-l"><li><span>Devem no mês</span><b>${R(recTot)}</b></li><li><span>Já recebi</span><b class="pos">${R(recPago)}</b></li><li><span>Falta receber</span><b class="${recPend > 0.005 ? "neg" : ""}">${R(recPend)}</b></li></ul>
+          <ul class="blk-l"><li><span>Devem no mês</span><b>${R(recTot)}</b></li><li><span>Já recebi</span><b class="pos">${R(recPago)}</b></li><li><span>Falta receber</span><b class="${recPend > 0.005 ? "neg" : ""}">${R(recPend)}</b></li>${ppL.length ? `<li><span><a class="pp-link" data-pp="${k}">Fatura PicPay ▾</a> (Daniel, fora das contas)</span><b class="${ppV - ppPago > 0.015 ? "neg" : "pos"}">${ppV - ppPago > 0.015 ? "falta " + R(ppV - ppPago) : "paga"}</b></li>` : ""}</ul>
           <div class="pbar alt"><span style="width:${recTot ? (recPago / recTot) * 100 : 0}%"></span></div><div class="blk-n">${Object.entries(devidoPessoa(k)).map(([p, v]) => esc(p) + " " + R0(v)).join(" · ") || "ninguém deve neste mês"}</div></div>
         <div class="blk blk-gasto"><div class="blk-t">💵 Posso gastar agora</div><div class="blk-v ${da.agora <= 0.005 ? "neg" : ""}">${R(da.agora)}</div>
           <ul class="blk-l">${da.conta ? `<li><span>🏦 Na conta</span><b>${R(da.conta.saldo)}</b></li><li><span>− Falta pagar${da.conta.itens.length ? " (" + da.conta.itens.map((c) => esc(c.nome)).join(", ") + ")" : ""}</span><b class="${da.conta.pend > 0.005 ? "neg" : ""}">${R(da.conta.pend)}</b></li>${da.conta.plano - da.conta.livre > 0.005 ? `<li><span>📊 Limite do plano</span><b>${R(da.conta.plano)}</b></li>` : ""}` : ""}${da.futuro ? `<li><span>⏳ ${fmtD(da.futuro.data)} (${DIAS[da.futuro.data.getDay()]})</span><b>+ ${R(da.futuro.valor)}</b></li>` : ""}
@@ -922,7 +937,7 @@
     // reembolsos de terceiros: o que já pagaram entra na data do pagamento; o que falta entra no vencimento
     const rc = receber(k); statusReceber(k, rc); const por = {};
     const soma = (d, n, v, feito) => { const key = n + "|" + d + "|" + feito; (por[key] = por[key] || { d, n, v: 0, feito }).v += v; };
-    rc.forEach((r) => { const pago = Math.min(r.valor, r.pago || 0), falta = r.valor - pago, dv = naData(r.quando, 15);
+    rc.forEach((r) => { if (r.semCaixa) return; const pago = Math.min(r.valor, r.pago || 0), falta = r.valor - pago, dv = naData(r.quando, 15);
       if (pago > 0.009) soma(naData(dt(r.dataPago), dv), "Reembolso " + r.pessoa, pago, true);
       if (falta > 0.1) soma(dv, "Reembolso " + r.pessoa, falta, false); });
     Object.values(por).forEach((o) => ev.push(o));
@@ -946,7 +961,7 @@
     // reserva = sobra do mês − o que ainda está livre para gastar no débito (salário + 13º/férias livres do mês)
     const dm = debitoMes(k), livre = Math.max(0, (dm.pd.teto || 0) + (dm.ex.valor || 0) - dm.usado), metaRes = Math.max(0, f.fim - livre);
     const fim = (x) => x.fim === k && (x.custo || 0) > 0.005;
-    const acabam = DATA.dividas.filter(fim).map((d) => ({ n: d.desc, v: d.custo })).concat(DATA.lanc.filter((l) => l.parcelado && fim(l)).map((l) => ({ n: l.desc, v: l.custo })));
+    const acabam = DATA.dividas.filter((d) => d.paga !== "PicPay" && fim(d)).map((d) => ({ n: d.desc, v: d.custo })).concat(DATA.lanc.filter((l) => l.parcelado && fim(l)).map((l) => ({ n: l.desc, v: l.custo })));
     const libera = acabam.reduce((s, x) => s + x.v, 0);
     const it = [
       [pior ? "bad" : "ok", pior ? "⚠️" : "✅", pior ? `Faltam ${R0(-pior.saldo)} para pagar tudo em dia` : "Dá para pagar todas as contas em dia", pior ? `em ${pad(pior.d)}/${mm}` : `menor sobra ${R0(f.min ? f.min.saldo : 0)}${f.min ? " em " + pad(f.min.d) + "/" + mm : ""}`],
@@ -1220,7 +1235,7 @@
       `<p class="muted">Defina os limites na aba Metas e Cortes da planilha.</p>`;
   }
   // ---------- reembolsos recebidos, parcelas que acabam, previsto x real ----------
-  function devidoPessoa(m) { const o = {}; receber(m).forEach((r) => (o[r.pessoa] = (o[r.pessoa] || 0) + r.valor)); return o; }
+  function devidoPessoa(m) { const o = {}; receber(m).filter((r) => !r.semCaixa).forEach((r) => (o[r.pessoa] = (o[r.pessoa] || 0) + r.valor)); return o; }
   function pendencias(k) {
     const pessoas = new Set(Object.keys(DATA.recebido)); DATA.meses.forEach((m) => Object.keys(devidoPessoa(m)).forEach((p) => pessoas.add(p)));
     const mes = {}, atras = {};
@@ -1605,3 +1620,9 @@
   if (!(CFG.PASS_HASH || "").trim()) $("sair").hidden = true;
   portao();
 })();
+
+// ocultar / mostrar a barra de abas e filtros (celular)
+document.addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest("#stickHide")) document.body.classList.add("stick-off");
+  else if (e.target.closest && e.target.closest("#stickShow")) document.body.classList.remove("stick-off");
+});

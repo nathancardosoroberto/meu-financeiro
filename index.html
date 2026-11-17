@@ -33,15 +33,13 @@
   </div>
 </header>
 
-<nav class="tabs" role="tablist">
+<div class="stick" id="stick"><nav class="tabs" role="tablist">
   <button role="tab" data-tab="geral" class="on"><span>📊</span> Visão geral</button>
   <button role="tab" data-tab="dividas"><span>🧾</span> Contas e dívidas</button>
   <button role="tab" data-tab="rend"><span>💰</span> Rendimentos</button>
   <button role="tab" data-tab="metas"><span>🎯</span> Metas e cortes</button>
   <button role="tab" data-tab="sim"><span>🧪</span> Simulação</button>
-</nav>
-
-<section class="filters" id="filtros" aria-label="Filtros">
+</nav><section class="filters" id="filtros" aria-label="Filtros">
   <div class="f keep"><label for="fMes">Mês</label><select id="fMes"></select></div>
   <div class="ftoggle keep"><button type="button" class="btn ghost" id="fToggle" aria-expanded="true">Filtros</button><span class="muted small" id="fAtivos"></span></div>
   <div class="f"><label for="fDe">Gráficos de</label><select id="fDe"></select></div>
@@ -54,7 +52,8 @@
   <div class="f wide"><label for="fItem">Item (conta ou dívida)</label><select id="fItem"></select></div>
   <div class="f"><label for="fUnid">Valores</label>
     <select id="fUnid"><option value="rs">R$</option><option value="pct">% das entradas do mês</option></select></div>
-</section>
+</section><button type="button" class="stick-hide" id="stickHide">▲ Ocultar abas e filtros</button></div>
+<button type="button" class="stick-show" id="stickShow">☰ Menu</button>
 
 <div class="sim-banner" id="simBanner" hidden></div>
 
